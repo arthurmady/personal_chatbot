@@ -1,0 +1,101 @@
+Étape 0 — Setup
+Environnement Python, structure de projet, OmniRoute lancé en local, test d'un premier appel API.
+
+Étape 1 — Ingestion multi-format
+Parser PDF/Word/txt/md/web en texte brut normalisé, avec métadonnées (source, date, type).
+
+Étape 2 — Chunking
+Découper le texte en chunks pertinents (stratégie fixe vs sémantique), avec overlap.
+
+Étape 3 — Embeddings + stockage Qdrant
+Choisir un modèle d'embedding, créer la collection Qdrant, indexer les chunks avec leurs métadonnées.
+
+Étape 4 — Retrieval
+Requête → embedding → recherche vectorielle (top-k), éventuellement reranking.
+
+Étape 5 — Génération contrainte (le cœur de ta demande)
+Prompt system strict pour forcer le LLM à répondre uniquement à partir du contexte injecté, gestion du cas "je ne sais pas".
+
+Étape 6 — Garde-fous / limites de réponse
+Détection de hors-sujet, refus propre, citation des sources, anti-hallucination.
+
+Étape 7 — Interface
+CLI simple puis API (FastAPI) puis, si tu veux, une UI (Streamlit/Gradio).
+
+Étape 8 — Évaluation
+Mesurer la fidélité au contexte (faithfulness), la pertinence du retrieval, etc.
+
+On commence par l'Étape 0 ?
+
+Q : Pour démarrer l'étape 0, quel est ton setup actuel ?
+R : Tout est prêt, j'ai juste besoin du plan de code
+
+Voici le plan de code pour l'Étape 0 — structure du projet + connexion à OmniRoute.
+
+Structure du projet
+personal-rag-chatbot/
+├── .env                      # clés/config (jamais commit)
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── config.py                 # charge les variables d'env
+├── src/
+│   ├── __init__.py
+│   ├── llm_client.py         # wrapper autour de l'appel LLM (OmniRoute)
+│   ├── ingestion/             # étape 1 (à venir)
+│   ├── chunking/               # étape 2 (à venir)
+│   ├── embeddings/              # étape 3 (à venir)
+│   ├── retrieval/                # étape 4 (à venir)
+│   └── generation/                # étape 5 (à venir)
+├── data/
+│   ├── raw/                  # tes documents sources
+│   └── processed/            # textes normalisés (étape 1)
+├── scripts/
+│   └── test_connection.py    # script de test étape 0
+└── tests/
+.env
+env
+OMNIROUTE_BASE_URL=http://localhost:20128/v1
+OMNIROUTE_MODEL=auto
+QDRANT_URL=http://localhost:6333
+config.py
+
+Charge ces variables via python-dotenv — c'est le seul fichier qui touche à os.environ, tout le reste importe depuis config.py.
+
+python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+OMNIROUTE_BASE_URL = os.getenv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1")
+OMNIROUTE_MODEL = os.getenv("OMNIROUTE_MODEL", "auto")
+QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+src/llm_client.py
+
+C'est ta seule dépendance vers OmniRoute — comme il expose une API compatible OpenAI, le SDK openai officiel fonctionne directement en changeant juste base_url. Ça t'évite d'écrire du HTTP à la main, et si tu changes de gateway plus tard, un seul fichier à toucher.
+
+python
+from openai import OpenAI
+from config import OMNIROUTE_BASE_URL, OMNIROUTE_MODEL
+
+client = OpenAI(
+    base_url=OMNIROUTE_BASE_URL,
+    api_key="not-needed",  # OmniRoute ne vérifie pas de clé en local
+)
+
+def ask_llm(messages: list[dict], model: str = OMNIROUTE_MODEL) -> str:
+    """
+    messages: liste au format [{"role": "user", "content": "..."}]
+    Retourne le texte de la réponse.
+    """
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+    )
+    return response.choices[0].message.content
+requirements.txt (pour cette étape)
+openai
+python-dotenv
+
+Je veux maintenant que tu me guides pour l'étape 1 — ingestion multi-format.
