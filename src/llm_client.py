@@ -6,8 +6,3 @@ llm = ChatOpenAI(
     api_key=OMNIROUTE_API_KEY, 
     model=OMNIROUTE_MODEL,
 )
-
-# Exemple d'appel simple (équivalent à l'ancien ask_llm) :
-#   from langchain_core.messages import HumanMessage
-#   response = llm.invoke([HumanMessage(content="Réponds juste OK.")])
-#   print(response.content)
