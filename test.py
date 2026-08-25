@@ -14,12 +14,14 @@ from pathlib import Path
 from src.chunking.chunk import chunk_markdown_by_header
 from src.embeddings.vectorstore import index_chunks
 
-text = Path("datas.md").read_text(encoding="utf-8")
-chunks = chunk_markdown_by_header(text, source="datas.md", max_chars=500)
-
-for c in chunks:
-    print(f"--- {c.metadata['title']} | tags={c.metadata['tags']} ---")
-    print(c.page_content)
-    print("next")
+text = Path("data/datas.md").read_text(encoding="utf-8")
+chunks = chunk_markdown_by_header(text, source="data/datas.md", max_chars=500)
 
 index_chunks(chunks)
+
+
+from src.retrieval.retriever import retrieve_and_rerank
+
+results = retrieve_and_rerank("Il a fait quoi comme formation", fetch_k=20, top_k=5)
+for doc, score in results:
+    print(f"[{score:.3f}] {doc.metadata['title']}")

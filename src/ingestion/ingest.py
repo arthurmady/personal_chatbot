@@ -1,11 +1,6 @@
 from pathlib import Path
 from langchain_core.documents import Document
-from langchain_community.document_loaders import (
-    PyPDFLoader,
-    Docx2txtLoader,
-    TextLoader,
-    WebBaseLoader,
-)
+from langchain_community.document_loaders import (PyPDFLoader,Docx2txtLoader,TextLoader,WebBaseLoader)
 
 def ingest(path_or_url: str) -> list[Document]:
     if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
@@ -30,7 +25,6 @@ def ingest(path_or_url: str) -> list[Document]:
  
         docs = loader.load()
  
-    # Enrichissement léger des metadata, commun à tous les formats
     for doc in docs:
         doc.metadata.setdefault("source", path_or_url)
  

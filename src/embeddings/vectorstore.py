@@ -7,7 +7,7 @@ from src.embeddings.embeddings import get_embedding_model
 from config import QDRANT_URL
 
 COLLECTION_NAME = "personal_chatbot"
-VECTOR_SIZE = 384  # dimension de multilingual-e5-small (change si tu changes de modèle)
+VECTOR_SIZE = 384  # dimension of multilingual-e5-small model
 
 def get_qdrant_client() -> QdrantClient:
     return QdrantClient(url=QDRANT_URL)
