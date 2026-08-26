@@ -5,7 +5,7 @@ from langchain_community.document_loaders import (PyPDFLoader,Docx2txtLoader,Tex
 def ingest(path_or_url: str) -> list[Document]:
     if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
         loader = WebBaseLoader(path_or_url)
-        docs = loader.load()
+        docs_file = loader.load()
  
     else:
         path = Path(path_or_url)
@@ -23,9 +23,9 @@ def ingest(path_or_url: str) -> list[Document]:
         else:
             raise ValueError(f"Format non supporté : {suffix}")
  
-        docs = loader.load()
+        docs_file = loader.load()
  
-    for doc in docs:
+    for doc in docs_file:
         doc.metadata.setdefault("source", path_or_url)
  
-    return docs
+    return docs_file
