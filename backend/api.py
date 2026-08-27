@@ -3,8 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from personal_chatbot.backend.src.generation.generate import generate_answer
-from personal_chatbot.backend.src.ingestion.ingest import ingest
+from src.generation.generate import generate_answer
+from src.ingestion.ingest import ingest
 
 app = FastAPI()
 
