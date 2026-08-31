@@ -20,13 +20,13 @@
 
 /* --- MODE CLAIR --- */
 .light {
-  --color-background: #FFFFFF;
-  --color-foreground: #0F172A;
-  --color-card: #F1F5F9;
-  --color-accent: #059669;
+  --color-background: #F3ECE0;   /* beige pâle, chaleureux, pas blanc pur */
+  --color-foreground: #000000;   /* texte noir, contraste maximal */
+  --color-card: #EAD3B0;         /* terracotta doux — bulles bot, sidebar, input */
+  --color-accent: #C2703D;       /* terracotta plus soutenu — bulles utilisateur, boutons */
   --color-on-accent: #FFFFFF;
-  --color-border: #E2E8F0;
-  --color-muted: #64748B;
+  --color-border: #DCC29B;       /* même famille chaude, légèrement plus foncé */
+  --color-muted: #8A7660;        /* gris-brun chaud pour les textes secondaires */
   --color-destructive: #DC2626;
 }
 
@@ -47,3 +47,29 @@ body {
   color: var(--color-foreground);
   transition: background-color 200ms ease, color 200ms ease;
 }
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-accent);
+}
+

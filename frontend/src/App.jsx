@@ -14,7 +14,7 @@ function App() {
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [afficherResume, setAfficherResume] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [suggestions, setSuggestions] = useState(SUGGESTIONS_PAR_DEFAUT);
   const messagesEndRef = useRef(null);
@@ -86,7 +86,7 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="flex h-screen text-foreground">
       {/* ---------- ZONE PRINCIPALE ---------- */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
@@ -119,7 +119,7 @@ function App() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {messages.length === 0 && (
-            <p className="text-muted text-sm">Bonjour, je suis l'assistant d'Arthur Mady. Je suis là pour répondre à toutes les questions que tu peux avoir sur lui.</p>
+            <p className="text-muted text-sm">Bonjour, je suis l'assistant d'Arthur Mady. Je suis là pour répondre à toutes les questions que vous pouvez avoir sur lui.</p>
           )}
 
           {messages.map((msg, index) => (
@@ -128,14 +128,14 @@ function App() {
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-base leading-relaxed ${
                   msg.role === "user"
                     ? "bg-accent text-on-accent"
                     : "bg-card text-foreground border border-border"
                 }`}
               >
                 {msg.role === "bot" ? (
-                  <div className="prose prose-sm prose-invert max-w-none">
+                  <div className="prose prose-base prose-invert max-w-none">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.content}
                     </ReactMarkdown>
@@ -183,7 +183,7 @@ function App() {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={gererTouche}
-              placeholder="Pose ta question..."
+              placeholder="Posez votre question..."
               disabled={loading}
               className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted disabled:opacity-50"
             />

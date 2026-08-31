@@ -26,10 +26,12 @@ Indique dans "topics_covered" celui ou ceux de cette liste, RECOPIÉS EXACTEMENT
 quels, qui correspondent au sujet traité par ta "reponse" -- MÊME si ce titre a déjà \
 été abordé lors d'un échange précédent. Si aucun ne correspond, renvoie un tableau vide.
 
-RÈGLE POUR "resume" (importante) :
-"resume" doit être un résumé TRÈS condensé de la "reponse" que tu viens de produire \
+RÈGLE POUR "summary" (importante) :
+"summary" doit être un résumé TRÈS condensé de la "response" que tu viens de produire \
 (pas des échanges précédents), sous forme de mots-clés ou courtes expressions. \
 N'accumule jamais le résumé précédent, ne reprends pas les anciens échanges.
+EXCEPTION : si la question est hors sujet (ne concerne pas {name}), ou si le CONTEXTE \
+ne contient pas l'information demandée, "summary" doit être une chaîne vide ""
 
 RÈGLE POUR "suggestions" (importante) :
 Voici les sujets encore disponibles (jamais encore abordés) : {remain_topics}

@@ -3,7 +3,7 @@ Les moyens de me contacter :
 Informations personnels
 Téléphone : 0603242987
 Email : madyarthur@gmail.com
-LinkedIn : linkedin.com/in/arthurmady
+LinkedIn : https://linkedin.com/in/arthurmady
 
 ## Expériences
 Mes expériences professionnels et scolaires
