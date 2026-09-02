@@ -1,6 +1,9 @@
 import json
+import re
+import time
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.documents import Document
+from json_repair import repair_json
 
 from src.llm_client import llm
 from src.generation.prompts import SYSTEM_PROMPT, FOLLOWUP_TEMPLATE
@@ -20,15 +23,44 @@ class Conversation:
     def _normalize(text: str) -> str:
         return text.strip().lower()
 
+    def _extract_json_blob(self, raw_content: str) -> str:
+        """Isole le bloc JSON même s'il y a du texte ou des ```fences``` autour."""
+
+        fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_content, re.DOTALL)
+        if fence_match:
+            return fence_match.group(1)
+
+        first = raw_content.find("{")
+        last = raw_content.rfind("}")
+        if first != -1 and last != -1 and last > first:
+            return raw_content[first:last + 1]
+        return raw_content
+
     def _parse_response(self, raw_content: str) -> dict:
-        cleaned = raw_content.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.strip("`").replace("json", "", 1).strip()
+        blob = self._extract_json_blob(raw_content)
+
         try:
-            return json.loads(cleaned)
+            parsed = json.loads(blob)
         except json.JSONDecodeError:
-            print("PARSE FAILED:", raw_content)
+            try:
+                repaired = repair_json(blob)
+                parsed = json.loads(repaired)
+            except Exception:
+                print("PARSE FAILED:", raw_content)
+                return {"response": raw_content, "summary": "", "topics_covered": [], "suggestions": []}
+
+        if not isinstance(parsed, dict):
+            print("PARSE FAILED (not a dict):", raw_content)
             return {"response": raw_content, "summary": "", "topics_covered": [], "suggestions": []}
+
+        parsed.setdefault("response", raw_content)
+        parsed.setdefault("summary", "")
+        if not isinstance(parsed.get("topics_covered"), list):
+            parsed["topics_covered"] = []
+        if not isinstance(parsed.get("suggestions"), list):
+            parsed["suggestions"] = []
+
+        return parsed
 
     def _build_messages(self, query: str, summary: str) -> list:
         remain_topics = self._remain_topics()
@@ -73,10 +105,16 @@ class Conversation:
 
     def ask(self, query: str) -> dict:
         messages = self._build_messages(query, self.summary)
+
+        start = time.perf_counter()
         response = llm.invoke(messages)
+        elapsed = time.perf_counter() - start
+        print("CONTENT:", response.content)
+        print(f"Temps d'exécution : {elapsed:.3f}s")
+
         parsed = self._parse_response(response.content)
 
-        response = parsed.get("response", "")
+        response_text = parsed.get("response", "")
         topics_covered = parsed.get("topics_covered", [])
         llm_suggestions = parsed.get("suggestions", [])
 
@@ -84,4 +122,4 @@ class Conversation:
         self.summary = "" if already_covered else parsed.get("summary", "")
 
         suggestions = self._build_suggestions(llm_suggestions)
-        return {"response": response, "suggestions": suggestions}
+        return {"response": response_text, "suggestions": suggestions}

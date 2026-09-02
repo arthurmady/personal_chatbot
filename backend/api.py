@@ -62,6 +62,9 @@ async def chat(request: AskRequest, background_tasks: BackgroundTasks):
    
     result = conv.ask(request.query)
 
+    for cle, valeur in conv.topics_covered.items():
+        print(cle, ":", valeur)
+
     return {
         "response": result["response"],
         "summary": conv.summary,
