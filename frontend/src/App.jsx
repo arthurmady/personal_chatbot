@@ -125,8 +125,15 @@ function App() {
           {messages.map((msg, index) => (
             <div
               key={index}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
+              {msg.role === "bot" && (
+                <img
+                  src="/happy.png"
+                  alt="Assistant d'Arthur Mady"
+                  className="w-14 h-14 rounded-full shrink-0 mb-1 object-cover"
+                />
+              )}
               <div
                 className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-base leading-relaxed ${
                   msg.role === "user"
@@ -148,7 +155,12 @@ function App() {
           ))}
 
           {loading && (
-            <div className="flex justify-start">
+            <div className="flex items-end gap-2 justify-start">
+              <img
+                src="/thinking.png"
+                alt="Assistant d'Arthur Mady"
+                className="w-14 h-14 rounded-full shrink-0 mb-1 object-cover"
+              />
               <div className="bg-card border border-border rounded-2xl px-4 py-2.5 flex gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.3s]"></span>
                 <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.15s]"></span>
