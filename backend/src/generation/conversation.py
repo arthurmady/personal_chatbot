@@ -24,7 +24,6 @@ class Conversation:
         return text.strip().lower()
 
     def _extract_json_blob(self, raw_content: str) -> str:
-        """Isole le bloc JSON même s'il y a du texte ou des ```fences``` autour."""
 
         fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_content, re.DOTALL)
         if fence_match:
@@ -93,14 +92,20 @@ class Conversation:
     def _remain_topics(self) -> list[str]:
         return [topic for topic, covered in self.topics_covered.items() if not covered]
 
-    def _build_suggestions(self, llm_suggestions: list[str]) -> list[str]:
+    def _build_suggestions(self, llm_suggestions: list) -> list[str]:
         seen = set()
         filtered = []
+
         for suggestion in llm_suggestions:
+            if not isinstance(suggestion, str):
+                continue
+
             suggestion = suggestion.strip()
+
             if suggestion and suggestion not in seen:
                 seen.add(suggestion)
                 filtered.append(suggestion)
+
         return filtered[:3]
 
     def ask(self, query: str) -> dict:
