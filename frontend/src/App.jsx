@@ -2,6 +2,23 @@ import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+function renderSummary(text) {
+  return text.split("\n").map((line, i) => {
+    const parts = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={j}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+    return (
+      <span key={i}>
+        {i > 0 && <br />}
+        {parts}
+      </span>
+    );
+  });
+}
+
 const SUGGESTIONS_PAR_DEFAUT = [
   "Qui est Arthur Mady ?",
   "Quels services propose-t-il ?",
@@ -18,7 +35,7 @@ function App() {
   const [sessionId, setSessionId] = useState(null);
   const [suggestions, setSuggestions] = useState(SUGGESTIONS_PAR_DEFAUT);
   const messagesEndRef = useRef(null);
-  const API_URL = import.meta.env.VITE_API_URL;
+  const API_URL = "";
 
   // Applique/enlève la classe "light" sur <html> selon le mode
   useEffect(() => {
@@ -129,7 +146,7 @@ function App() {
             >
               {msg.role === "bot" && (
                 <img
-                  src="/happy.png"
+                  src="/happy.png?v=2"
                   alt="Assistant d'Arthur Mady"
                   className="w-14 h-14 rounded-full shrink-0 mb-1 object-cover"
                 />
@@ -226,13 +243,13 @@ function App() {
           {resumes.length === 0 ? (
             <p className="text-sm text-muted">Aucun résumé pour l'instant.</p>
           ) : (
-            <ul className="space-y-2">
+            <div className="space-y-3">
               {resumes.map((point, index) => (
-                <li key={index} className="text-sm text-foreground leading-relaxed">
-                  {point}
-                </li>
+                <div key={index} className="text-sm text-foreground leading-relaxed">
+                  {renderSummary(point)}
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </aside>
       )}

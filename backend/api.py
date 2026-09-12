@@ -1,23 +1,15 @@
 from pathlib import Path
 import uuid
 from fastapi import FastAPI, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src.generation.conversation import Conversation
 from src.generation.context_builder import extract_topics
 from src.ingestion.ingest import ingest
-from config import FASTAPI_URL
 
 
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[FASTAPI_URL, "http://localhost:5173"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 sessions: dict[str, Conversation] = {}
 
@@ -34,7 +26,15 @@ class AskResponse(BaseModel):
     summary: str
 
 
+_cached_docs = None
+_cached_topics = None
+
+
 def _load_all_docs_and_topics():
+    global _cached_docs, _cached_topics
+    if _cached_docs is not None:
+        return _cached_docs, _cached_topics
+
     all_docs = []
     topics: list[str] = []
     for file in Path("data").glob("*"):
@@ -45,6 +45,9 @@ def _load_all_docs_and_topics():
             if file.suffix.lower() == ".md":
                 raw_text = file.read_text(encoding="utf-8")
                 topics.extend(extract_topics(raw_text))
+
+    _cached_docs = all_docs
+    _cached_topics = topics
     return all_docs, topics
 
 
@@ -59,8 +62,7 @@ async def chat(request: AskRequest, background_tasks: BackgroundTasks):
 
     conv = sessions[session_id]
 
-   
-    result = conv.ask(request.query)
+    result = await conv.ask(request.query)
 
     for cle, valeur in conv.topics_covered.items():
         print(cle, ":", valeur)
@@ -71,3 +73,15 @@ async def chat(request: AskRequest, background_tasks: BackgroundTasks):
         "suggestions": result["suggestions"],
         "session_id": session_id,
     }
+
+
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "dist"
+
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    file_path = FRONTEND_DIR / full_path
+    if file_path.is_file():
+        cache = "no-cache" if not full_path.startswith("assets/") else "public, max-age=31536000, immutable"
+        return FileResponse(file_path, headers={"Cache-Control": cache})
+    return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})

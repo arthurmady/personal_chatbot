@@ -40,12 +40,16 @@ class Conversation:
 
         try:
             parsed = json.loads(blob)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}")
+            print(f"Raw blob: {blob[:500]}")
             try:
                 repaired = repair_json(blob)
                 parsed = json.loads(repaired)
-            except Exception:
-                print("PARSE FAILED:", raw_content)
+                print("JSON repaired successfully")
+            except Exception as e2:
+                print(f"Repair also failed: {e2}")
+                print("PARSE FAILED:", raw_content[:500])
                 return {"response": raw_content, "summary": "", "topics_covered": [], "suggestions": []}
 
         if not isinstance(parsed, dict):
@@ -108,14 +112,16 @@ class Conversation:
 
         return filtered[:3]
 
-    def ask(self, query: str) -> dict:
+    async def ask(self, query: str) -> dict:
         messages = self._build_messages(query, self.summary)
 
         start = time.perf_counter()
-        response = llm.invoke(messages)
+        response = await llm.ainvoke(messages)
         elapsed = time.perf_counter() - start
+        model_used = getattr(response, 'response_metadata', {}).get('model_name', llm.model_name)
+        print(f"Modèle: {model_used} | Temps: {elapsed:.3f}s")
+        print(f"Metadata: {response.response_metadata}")
         print("CONTENT:", response.content)
-        print(f"Temps d'exécution : {elapsed:.3f}s")
 
         parsed = self._parse_response(response.content)
 
@@ -124,7 +130,11 @@ class Conversation:
         llm_suggestions = parsed.get("suggestions", [])
 
         already_covered = self._update_topics_covered(topics_covered)
-        self.summary = "" if already_covered else parsed.get("summary", "")
+        summary = "" if already_covered else parsed.get("summary", "")
+        print("RAW SUMMARY:", repr(summary))
+        summary = summary.replace("\\n", "\n")
+        self.summary = summary
+        print("CLEANED SUMMARY:", repr(self.summary))
 
         suggestions = self._build_suggestions(llm_suggestions)
         return {"response": response_text, "suggestions": suggestions}
