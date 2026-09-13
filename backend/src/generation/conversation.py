@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import time
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -8,6 +9,8 @@ from json_repair import repair_json
 from src.llm_client import llm
 from src.generation.prompts import SYSTEM_PROMPT, FOLLOWUP_TEMPLATE
 from src.generation.context_builder import build_context
+
+logger = logging.getLogger(__name__)
 
 NAME = "Arthur"
 
@@ -102,18 +105,18 @@ class Conversation:
         response = await llm.ainvoke(messages)
         elapsed = time.perf_counter() - start
         model_used = getattr(response, 'response_metadata', {}).get('model_name', llm.model_name)
-        print(f"Model: {model_used} | Time: {elapsed:.3f}s")
+        logger.debug("Model: %s | Time: %.3fs", model_used, elapsed)
 
         parsed = self._parse_response(response.content)
 
-        print("RAW RESPONSE:", response.content[:800])
+        logger.debug("RAW RESPONSE: %s", response.content[:800])
 
         response_text = parsed.get("response", "")
         topics_covered = parsed.get("topics_covered", [])
         llm_suggestions = parsed.get("suggestions", [])
 
-        print("PARSED RESPONSE:", response_text[:300])
-        print("SUMMARY:", parsed.get("summary", "")[:300])
+        logger.debug("PARSED RESPONSE: %s", response_text[:300])
+        logger.debug("SUMMARY: %s", parsed.get("summary", "")[:300])
 
         already_covered = self._update_topics_covered(topics_covered)
         summary = "" if already_covered else parsed.get("summary", "")

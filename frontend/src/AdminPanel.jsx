@@ -1,15 +1,9 @@
 import { useState, useEffect } from "react";
 
 const API_URL = "";
-const TOKEN_KEY = "admin_token";
-
-function authHeaders() {
-  const token = localStorage.getItem(TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 async function authFetch(url, options = {}) {
-  return fetch(url, { ...options, headers: { ...options.headers, ...authHeaders() } });
+  return fetch(url, { ...options, credentials: "include", headers: options.headers });
 }
 
 function TabButton({ label, active, onClick }) {
@@ -39,12 +33,12 @@ function LoginForm({ onLogin }) {
     try {
       const res = await fetch(`${API_URL}/admin/login`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
       const data = await res.json();
-      if (data.token) {
-        localStorage.setItem(TOKEN_KEY, data.token);
+      if (data.ok) {
         onLogin();
       } else {
         setError(true);
@@ -320,12 +314,29 @@ function GitHubTab() {
 
 export default function AdminPanel() {
   const [tab, setTab] = useState("stats");
-  const [loggedIn, setLoggedIn] = useState(() => !!localStorage.getItem(TOKEN_KEY));
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [checking, setChecking] = useState(true);
 
-  const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
+  useEffect(() => {
+    authFetch(`${API_URL}/admin/stats`)
+      .then((r) => {
+        if (r.ok) setLoggedIn(true);
+      })
+      .finally(() => setChecking(false));
+  }, []);
+
+  const logout = async () => {
+    await authFetch(`${API_URL}/admin/logout`, { method: "POST" });
     setLoggedIn(false);
   };
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted text-sm">Chargement...</p>
+      </div>
+    );
+  }
 
   if (!loggedIn) {
     return <LoginForm onLogin={() => setLoggedIn(true)} />;

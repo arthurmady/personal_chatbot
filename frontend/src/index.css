@@ -11,8 +11,8 @@
   --color-background: #0F172A;
   --color-foreground: #F8FAFC;
   --color-card: #1E293B;
-  --color-accent: #10B981;
-  --color-on-accent: #000000;
+  --color-accent: #7A9B6D;
+  --color-on-accent: #FFFFFF;
   --color-border: #334155;
   --color-muted: #94A3B8;
   --color-destructive: #DC2626;
@@ -22,8 +22,8 @@
 .light {
   --color-background: #F3ECE0;   /* beige pâle, chaleureux, pas blanc pur */
   --color-foreground: #000000;   /* texte noir, contraste maximal */
-  --color-card: #EAD3B0;         /* terracotta doux — bulles bot, sidebar, input */
-  --color-accent: #C2703D;       /* terracotta plus soutenu — bulles utilisateur, boutons */
+  --color-card: #C8D8BC;         /* sauge pâle — bulles bot, sidebar, input */
+  --color-accent: #7A9B6D;       /* olive doux — bulles utilisateur, boutons */
   --color-on-accent: #FFFFFF;
   --color-border: #DCC29B;       /* même famille chaude, légèrement plus foncé */
   --color-muted: #8A7660;        /* gris-brun chaud pour les textes secondaires */
