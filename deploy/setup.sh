@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+APP_DIR=/var/www/personal_chatbot
+
 echo "=== System update ==="
 apt update && apt upgrade -y
 
@@ -15,10 +17,11 @@ if ! command -v node &> /dev/null; then
 fi
 
 echo "=== Cloning repo ==="
-rm -rf /opt/chatbot
-git clone https://github.com/arthurmady/personal_chatbot.git /opt/chatbot
+rm -rf "$APP_DIR"
+mkdir -p /var/www
+git clone https://github.com/arthurmady/personal_chatbot.git "$APP_DIR"
 
-cd /opt/chatbot
+cd "$APP_DIR"
 
 echo "=== Creating Python venv ==="
 python3 -m venv venv
@@ -33,10 +36,10 @@ cd ..
 
 echo "=== Creating .env ==="
 cp backend/.env.example backend/.env
-echo ">>> Edit /opt/chatbot/backend/.env with your real values <<<"
+echo ">>> Edit $APP_DIR/backend/.env with your real values <<<"
 
 echo "=== Installing systemd service ==="
-cp deploy/chatbot.service /etc/systemd/system/
+cp deploy/chatbot.service /etc/systemd/system/chatbot.service
 systemctl daemon-reload
 systemctl enable chatbot
 systemctl start chatbot
@@ -48,4 +51,4 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 
 echo "=== Setup complete ==="
-echo "App should be running on http://$(hostname -I | awk '{print $1}')"
+echo "App should be running on http://$(hostname -I | awk '{print $1}'):8000"

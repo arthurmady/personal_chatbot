@@ -1,10 +1,12 @@
 #!/bin/bash
 set -e
 
-cd /opt/chatbot
+APP_DIR=/var/www/personal_chatbot
+
+cd "$APP_DIR"
 
 echo "=== Pulling latest code ==="
-git -c credential.helper="store --file=/opt/chatbot/.git-credentials" pull origin main
+git -c credential.helper="store --file=$APP_DIR/.git-credentials" pull origin main
 
 echo "=== Installing Python dependencies ==="
 source venv/bin/activate
