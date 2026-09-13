@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import AdminPanel from "./AdminPanel";
 
 function renderSummary(text) {
   return text.split("\n").map((line, i) => {
@@ -25,7 +26,7 @@ const SUGGESTIONS_PAR_DEFAUT = [
   "Quel est son parcours professionnel ?",
 ];
 
-function App() {
+function ChatApp() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [resumes, setResumes] = useState([]);
@@ -257,4 +258,9 @@ function App() {
   );
 }
 
-export default App;
+export default function App() {
+  if (window.location.pathname === "/admin") {
+    return <AdminPanel />;
+  }
+  return <ChatApp />;
+}
