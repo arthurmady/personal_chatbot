@@ -70,6 +70,26 @@ body {
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Force list markers — Tailwind preflight disables them */
+.chat-bubble ul,
+.chat-bubble ol {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.chat-bubble ol {
+  list-style-type: decimal;
+}
+
+.chat-bubble li {
+  margin: 0.25em 0;
+}
+
+.chat-bubble li::marker {
+  color: var(--color-foreground);
 }
 

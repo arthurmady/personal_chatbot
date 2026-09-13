@@ -19,10 +19,6 @@ class Conversation:
         self.topics_covered: dict[str, bool] = {topic: False for topic in topics}
         self.summary = ""
 
-    @staticmethod
-    def _normalize(text: str) -> str:
-        return text.strip().lower()
-
     def _extract_json_blob(self, raw_content: str) -> str:
 
         fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_content, re.DOTALL)
@@ -40,20 +36,14 @@ class Conversation:
 
         try:
             parsed = json.loads(blob)
-        except json.JSONDecodeError as e:
-            print(f"JSON decode error: {e}")
-            print(f"Raw blob: {blob[:500]}")
+        except json.JSONDecodeError:
             try:
                 repaired = repair_json(blob)
                 parsed = json.loads(repaired)
-                print("JSON repaired successfully")
-            except Exception as e2:
-                print(f"Repair also failed: {e2}")
-                print("PARSE FAILED:", raw_content[:500])
+            except Exception:
                 return {"response": raw_content, "summary": "", "topics_covered": [], "suggestions": []}
 
         if not isinstance(parsed, dict):
-            print("PARSE FAILED (not a dict):", raw_content)
             return {"response": raw_content, "summary": "", "topics_covered": [], "suggestions": []}
 
         parsed.setdefault("response", raw_content)
@@ -98,19 +88,12 @@ class Conversation:
 
     def _build_suggestions(self, llm_suggestions: list) -> list[str]:
         seen = set()
-        filtered = []
-
-        for suggestion in llm_suggestions:
-            if not isinstance(suggestion, str):
-                continue
-
-            suggestion = suggestion.strip()
-
-            if suggestion and suggestion not in seen:
-                seen.add(suggestion)
-                filtered.append(suggestion)
-
-        return filtered[:3]
+        result = []
+        for s in llm_suggestions:
+            if isinstance(s, str) and s.strip() and s not in seen:
+                seen.add(s)
+                result.append(s)
+        return result[:3]
 
     async def ask(self, query: str) -> dict:
         messages = self._build_messages(query, self.summary)
@@ -119,22 +102,23 @@ class Conversation:
         response = await llm.ainvoke(messages)
         elapsed = time.perf_counter() - start
         model_used = getattr(response, 'response_metadata', {}).get('model_name', llm.model_name)
-        print(f"Modèle: {model_used} | Temps: {elapsed:.3f}s")
-        print(f"Metadata: {response.response_metadata}")
-        print("CONTENT:", response.content)
+        print(f"Model: {model_used} | Time: {elapsed:.3f}s")
 
         parsed = self._parse_response(response.content)
+
+        print("RAW RESPONSE:", response.content[:800])
 
         response_text = parsed.get("response", "")
         topics_covered = parsed.get("topics_covered", [])
         llm_suggestions = parsed.get("suggestions", [])
 
+        print("PARSED RESPONSE:", response_text[:300])
+        print("SUMMARY:", parsed.get("summary", "")[:300])
+
         already_covered = self._update_topics_covered(topics_covered)
         summary = "" if already_covered else parsed.get("summary", "")
-        print("RAW SUMMARY:", repr(summary))
         summary = summary.replace("\\n", "\n")
         self.summary = summary
-        print("CLEANED SUMMARY:", repr(self.summary))
 
         suggestions = self._build_suggestions(llm_suggestions)
         return {"response": response_text, "suggestions": suggestions}

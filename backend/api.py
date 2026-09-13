@@ -1,12 +1,14 @@
 from pathlib import Path
 import uuid
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from langchain_core.documents import Document
+
 from src.generation.conversation import Conversation
 from src.generation.context_builder import extract_topics
-from src.ingestion.ingest import ingest
+from src.fetch_github import fetch_github_readmes
 
 
 app = FastAPI()
@@ -35,28 +37,25 @@ def _load_all_docs_and_topics():
     if _cached_docs is not None:
         return _cached_docs, _cached_topics
 
-    all_docs = []
+    md_files = sorted(Path("data").glob("*.md"))
+    blocks = []
     topics: list[str] = []
-    for file in Path("data").glob("*"):
-        if file.is_file():
-            file_path = str(file.resolve())
-            docs_file = ingest(file_path)
-            all_docs.extend(docs_file)
-            if file.suffix.lower() == ".md":
-                raw_text = file.read_text(encoding="utf-8")
-                topics.extend(extract_topics(raw_text))
+    for file in md_files:
+        raw = file.read_text(encoding="utf-8")
+        blocks.append(raw)
+        topics.extend(extract_topics(raw))
 
-    _cached_docs = all_docs
+    full_text = "\n\n---\n\n".join(blocks)
+    _cached_docs = [Document(page_content=full_text)]
     _cached_topics = topics
-    return all_docs, topics
+    return _cached_docs, topics
 
 
 @app.post("/chat", response_model=AskResponse)
-async def chat(request: AskRequest, background_tasks: BackgroundTasks):
+async def chat(request: AskRequest):
     session_id = request.session_id or str(uuid.uuid4())
-    is_new_session = session_id not in sessions
 
-    if is_new_session:
+    if session_id not in sessions:
         all_docs, topics = _load_all_docs_and_topics()
         sessions[session_id] = Conversation(all_docs, topics)
 
@@ -64,15 +63,21 @@ async def chat(request: AskRequest, background_tasks: BackgroundTasks):
 
     result = await conv.ask(request.query)
 
-    for cle, valeur in conv.topics_covered.items():
-        print(cle, ":", valeur)
-
     return {
         "response": result["response"],
         "summary": conv.summary,
         "suggestions": result["suggestions"],
         "session_id": session_id,
     }
+
+
+@app.post("/refresh-github")
+async def refresh_github():
+    global _cached_docs, _cached_topics
+    result = fetch_github_readmes()
+    _cached_docs = None
+    _cached_topics = None
+    return result
 
 
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "dist"

@@ -159,7 +159,7 @@ function App() {
                 }`}
               >
                 {msg.role === "bot" ? (
-                  <div className={`prose prose-base max-w-none ${darkMode ? "prose-invert" : ""}`}>
+                  <div className={`chat-bubble prose prose-base max-w-none ${darkMode ? "prose-invert" : ""}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.content}
                     </ReactMarkdown>
