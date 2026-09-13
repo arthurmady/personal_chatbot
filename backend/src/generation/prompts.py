@@ -20,20 +20,27 @@ FORMAT "response" (uniquement) :
 - Element 3
 
 FORMAT "summary" (uniquement) :
-- Titre du sujet en gras puis des infos groupées, UN GROUPE PAR LIGNE.
-- Chaque ligne = un projet/expérience avec détails courts (ex: "MBDA, stage 6 mois").
+- S'appuie UNIQUEMENT sur les sujets mentionnés dans "response".
+- Pour chaque sujet traité dans la réponse, mets un titre en gras puis des termes clés SEPARÉS par des sauts de ligne.
+- JAMAIS de phrases. Juste des mots ou expressions courtes.
+- N'inclus PAS un sujet déjà abordé précédemment (présent dans le résumé précédent).
 - Utilise de vrais sauts de ligne entre chaque info.
 - Exemple :
 **Expériences**
 MBDA, stage 6 mois
 SODEBO, stage 4 mois
-Excelia, stage 3 mois
-- Vide si hors sujet ou info manquante.
+
+**Compétences**
+Python
+SQL
+LangChain
+Docker
+- Vide si aucun nouveau sujet traité.
 
 JSON DE SORTIE (strict, sans texte autour) :
 {{
   "response": "réponse en Markdown avec des phrases complètes et gras sur les éléments importants",
-  "summary": "**Titre sujet**\ninfo 1 détails courts\ninfo 2 détails courts",
+  "summary": "**Sujet**\ninfo 1\ninfo 2",
   "topics_covered": ["titre exact 1", "titre exact 2"],
   "suggestions": ["question simple 1", "question simple 2"]
 }}
