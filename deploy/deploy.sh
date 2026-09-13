@@ -6,7 +6,8 @@ APP_DIR=/var/www/personal_chatbot
 cd "$APP_DIR"
 
 echo "=== Pulling latest code ==="
-git -c credential.helper="store --file=$APP_DIR/.git-credentials" pull origin main
+export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519_arthurmady -o IdentitiesOnly=yes"
+git pull origin main
 
 echo "=== Installing Python dependencies ==="
 source venv/bin/activate
