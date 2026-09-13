@@ -2,3 +2,8 @@ langchain-openai
 langchain_community
 langchain_core
 httpx
+fastapi
+pydantic
+uvicorn[standard]
+python-dotenv
+json_repair
