@@ -4,7 +4,7 @@ set -e
 cd /opt/chatbot
 
 echo "=== Pulling latest code ==="
-git pull origin main
+git -c credential.helper="store --file=/opt/chatbot/.git-credentials" pull origin main
 
 echo "=== Installing Python dependencies ==="
 source venv/bin/activate
@@ -18,6 +18,7 @@ cd ..
 
 echo "=== Restarting backend ==="
 systemctl restart chatbot
+sleep 2
 systemctl is-active --quiet chatbot && echo "Backend running" || echo "Backend FAILED to start"
 
 echo "=== Deploy complete ==="
