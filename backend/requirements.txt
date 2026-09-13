@@ -7,3 +7,4 @@ pydantic
 uvicorn[standard]
 python-dotenv
 json_repair
+python-multipart
