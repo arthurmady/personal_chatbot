@@ -3,11 +3,10 @@ set -e
 
 APP_DIR=/var/www/personal_chatbot
 
-echo "=== System update ==="
-apt update && apt upgrade -y
+cd "$APP_DIR"
 
 echo "=== Installing dependencies ==="
-apt install -y git python3 python3-venv python3-pip nginx curl
+apt install -y git python3 python3-venv python3-pip curl
 
 # Node.js 20.x
 if ! command -v node &> /dev/null; then
@@ -15,13 +14,6 @@ if ! command -v node &> /dev/null; then
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   apt install -y nodejs
 fi
-
-echo "=== Cloning repo ==="
-rm -rf "$APP_DIR"
-mkdir -p /var/www
-git clone https://github.com/arthurmady/personal_chatbot.git "$APP_DIR"
-
-cd "$APP_DIR"
 
 echo "=== Creating Python venv ==="
 python3 -m venv venv
@@ -44,11 +36,6 @@ systemctl daemon-reload
 systemctl enable chatbot
 systemctl start chatbot
 
-echo "=== Configuring Nginx ==="
-cp deploy/nginx.conf /etc/nginx/sites-available/chatbot
-ln -sf /etc/nginx/sites-available/chatbot /etc/nginx/sites-enabled/chatbot
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl reload nginx
-
 echo "=== Setup complete ==="
-echo "App should be running on http://$(hostname -I | awk '{print $1}'):8000"
+echo "Backend running on http://$(hostname -I | awk '{print $1}'):1234"
+echo "Configure Traefik to proxy to http://127.0.0.1:1234"
