@@ -1,12 +1,12 @@
 #!/bin/bash
 set -e
 
-APP_DIR=/var/www/personal_chatbot
+APP_DIR="${APP_DIR:-/var/www/personal_chatbot}"
 
 cd "$APP_DIR"
 
 echo "=== Pulling latest code ==="
-export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519_arthurmady -o IdentitiesOnly=yes"
+# Configure SSH key if needed: export GIT_SSH_COMMAND="ssh -i /path/to/key"
 git pull origin main
 
 echo "=== Installing Python dependencies ==="

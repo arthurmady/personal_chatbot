@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-APP_DIR=/var/www/personal_chatbot
+APP_DIR="${APP_DIR:-/var/www/personal_chatbot}"
 
 cd "$APP_DIR"
 
@@ -31,7 +31,24 @@ cp backend/.env.example backend/.env
 echo ">>> Edit $APP_DIR/backend/.env with your real values <<<"
 
 echo "=== Installing systemd service ==="
-cp deploy/chatbot.service /etc/systemd/system/chatbot.service
+cat > /etc/systemd/system/chatbot.service << EOF
+[Unit]
+Description=Personal Chatbot API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${APP_DIR}/backend
+ExecStart=${APP_DIR}/venv/bin/python -m uvicorn api:app --host 0.0.0.0 --port 1234
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=${APP_DIR}/backend
+
+[Install]
+WantedBy=multi-user.target
+EOF
 systemctl daemon-reload
 systemctl enable chatbot
 systemctl start chatbot
