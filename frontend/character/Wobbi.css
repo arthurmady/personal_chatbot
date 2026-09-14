@@ -1,0 +1,24 @@
+.wobbi-character {
+  display: block;
+  overflow: visible;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wobbi-character [data-eye] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.wobbi-character:focus {
+  outline: none;
+}
+
+.wobbi-character:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wobbi-character * {
+    transition: none !important;
+  }
+}

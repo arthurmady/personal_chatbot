@@ -68,7 +68,7 @@ body {
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  color: var(--color-accent);
+  background-color: var(--color-muted);
 }
 
 /* Force list markers — Tailwind preflight disables them */

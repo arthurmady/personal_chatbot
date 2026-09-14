@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 288 288" width="32" height="32">
+  <g transform="translate(0, 2)">
+    <path d="M57 189 C13 169 21 124 49 112 C33 70 79 43 109 66 C142 25 194 52 195 87 C241 89 251 144 220 164 C235 211 177 234 149 213 C111 239 70 222 57 189Z" fill="#7A9B6D" stroke="#ffffff" stroke-width="5" stroke-linejoin="round"/>
+    <g transform="translate(0, 2)">
+      <!-- Left eye (sleepy) -->
+      <ellipse cx="102" cy="127" rx="22" ry="29" fill="#ffffff"/>
+      <ellipse cx="109" cy="119" rx="9" ry="11" fill="#111218"/>
+      <ellipse cx="106.6" cy="114.2" rx="2.6" ry="3.2" fill="#ffffff" opacity="0.96"/>
+      <path d="M100 135 Q102 141 104 135" fill="none" stroke="#111218" stroke-width="4" stroke-linecap="round"/>
+      <!-- Right eye (sleepy) -->
+      <ellipse cx="160" cy="117" rx="22" ry="29" fill="#ffffff"/>
+      <ellipse cx="167" cy="109" rx="9" ry="11" fill="#111218"/>
+      <ellipse cx="164.6" cy="104.2" rx="2.6" ry="3.2" fill="#ffffff" opacity="0.96"/>
+      <path d="M158 125 Q160 131 162 125" fill="none" stroke="#111218" stroke-width="4" stroke-linecap="round"/>
+      <!-- Brows -->
+      <path d="M83 90 L120 88" fill="none" stroke="#111218" stroke-width="5" stroke-linecap="round"/>
+      <path d="M142 88 L179 90" fill="none" stroke="#111218" stroke-width="5" stroke-linecap="round"/>
+      <!-- Mouth -->
+      <path d="M122 174 H134" fill="none" stroke="#111218" stroke-width="5" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

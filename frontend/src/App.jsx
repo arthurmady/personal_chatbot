@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import AdminPanel from "./AdminPanel";
+import { Wobbi } from "../character";
 
 function renderSummary(text) {
   return text.split("\n").map((line, i) => {
@@ -31,6 +32,7 @@ function ChatApp() {
   const [messages, setMessages] = useState([]);
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [longWait, setLongWait] = useState(false);
   const [afficherResume, setAfficherResume] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [sessionId, setSessionId] = useState(null);
@@ -47,6 +49,16 @@ function ChatApp() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // Timer longue attente
+  useEffect(() => {
+    if (!loading) {
+      setLongWait(false);
+      return;
+    }
+    const timer = setTimeout(() => setLongWait(true), 13000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
 
   const envoyerQuestion = async (texteManuel) => {
@@ -109,7 +121,10 @@ function ChatApp() {
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h1 className="text-lg font-semibold">Assistant d'Arthur Mady</h1>
+          <div className="flex items-center gap-3">
+            <Wobbi state="idle" size={40} interactive={false} />
+            <h1 className="text-lg font-semibold">MadyGPT : l'assistant personnel d'Arthur Mady</h1>
+          </div>
 
           <div className="flex items-center gap-3">
             <button
@@ -135,23 +150,23 @@ function ChatApp() {
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4" data-gaze-zone="">
           {messages.length === 0 && (
             <p className="text-muted text-sm">Bonjour, je suis l'assistant d'Arthur Mady. Je suis là pour répondre à toutes les questions que vous pouvez avoir sur lui.</p>
           )}
 
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              {msg.role === "bot" && (
-                <img
-                  src="/happy.png?v=2"
-                  alt="Assistant d'Arthur Mady"
-                  className="w-14 h-14 rounded-full shrink-0 mb-1 object-cover"
-                />
-              )}
+          {messages.map((msg, index) => {
+            const isLastBot = msg.role === "bot" && index === messages.length - 1;
+            return (
+              <div
+                key={index}
+                className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                {msg.role === "bot" && (
+                  <div className={`relative z-10 w-20 h-20 shrink-0 mb-1 ${isLastBot ? "" : "hidden"}`}>
+                    <Wobbi state={isLastBot && question.length > 0 ? "sleeping" : "idle"} size={120} interactive={true} tabIndex={-1} role="img" style={{ transform: 'translateX(-12px)' }} />
+                  </div>
+                )}
               <div
                 className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-base leading-relaxed ${
                   msg.role === "user"
@@ -170,25 +185,24 @@ function ChatApp() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {loading && (
             <div className="flex items-end gap-2 justify-start">
-              <img
-                src="/thinking.png"
-                alt="Assistant d'Arthur Mady"
-                className="w-14 h-14 rounded-full shrink-0 mb-1 object-cover"
-              />
+              <div className="relative z-10 w-20 h-20 shrink-0 mb-1">
+                <Wobbi state="thinking" size={120} interactive={true} tabIndex={-1} role="img" style={{ transform: 'translateX(-12px)' }} />
+              </div>
 
               <div className="bg-card border border-border rounded-2xl px-4 py-2.5 flex items-center gap-3">
                 <span className="text-sm text-muted">
-                  Je fouille dans les informations que j'ai
+                  {longWait ? "   J'ai bientôt la réponse, patientez encore un peu" : "   Je cherche"}
                 </span>
 
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.3s]"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.15s]"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce"></span>
+                <div className="flex gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-accent animate-bounce [animation-delay:-0.3s]"></span>
+                  <span className="w-2 h-2 rounded-full bg-accent animate-bounce [animation-delay:-0.15s]"></span>
+                  <span className="w-2 h-2 rounded-full bg-accent animate-bounce"></span>
                 </div>
               </div>
             </div>
@@ -204,7 +218,7 @@ function ChatApp() {
               <button
                 key={index}
                 onClick={() => envoyerSuggestion(texte)}
-                className="cursor-pointer rounded-full border border-border bg-card text-sm text-foreground px-3.5 py-1.5 hover:border-accent hover:text-accent transition-colors duration-200"
+                className="cursor-pointer rounded-full bg-accent text-on-accent text-sm font-medium px-3.5 py-1.5 hover:opacity-80 transition-opacity duration-200"
               >
                 {texte}
               </button>
