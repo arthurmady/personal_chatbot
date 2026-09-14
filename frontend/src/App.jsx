@@ -37,6 +37,7 @@ function ChatApp() {
   const [darkMode, setDarkMode] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [suggestions, setSuggestions] = useState(SUGGESTIONS_PAR_DEFAUT);
+  const [showWelcome, setShowWelcome] = useState(true);
   const messagesEndRef = useRef(null);
   const API_URL = "";
 
@@ -116,7 +117,7 @@ function ChatApp() {
   };
 
   return (
-    <div className="flex h-screen text-foreground">
+    <div className="flex h-screen text-foreground" data-gaze-zone="">
       {/* ---------- ZONE PRINCIPALE ---------- */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
@@ -150,7 +151,7 @@ function ChatApp() {
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4" data-gaze-zone="">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {messages.length === 0 && (
             <p className="text-muted text-sm">Bonjour, je suis l'assistant d'Arthur Mady. Je suis là pour répondre à toutes les questions que vous pouvez avoir sur lui.</p>
           )}
@@ -176,7 +177,7 @@ function ChatApp() {
               >
                 {msg.role === "bot" ? (
                   <div className={`chat-bubble prose prose-base max-w-none ${darkMode ? "prose-invert" : ""}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>
                       {msg.content}
                     </ReactMarkdown>
                   </div>
@@ -236,7 +237,7 @@ function ChatApp() {
               onKeyDown={gererTouche}
               placeholder="Posez votre question..."
               disabled={loading}
-              className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted disabled:opacity-50"
+              className="flex-1 bg-transparent outline-none text-sm placeholder:text-foreground/50 disabled:opacity-50"
             />
             <button
               onClick={() => envoyerQuestion()}
@@ -267,6 +268,35 @@ function ChatApp() {
             </div>
           )}
         </aside>
+      )}
+
+      {/* ---------- POPUP BIENVENUE ---------- */}
+      {showWelcome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="relative bg-card border border-border rounded-3xl shadow-2xl p-8 max-w-2xl w-full mx-4 flex flex-col items-center gap-6 animate-popup">
+            <div className="w-40 h-40">
+              <Wobbi state="idle" size={160} interactive={true} tabIndex={-1} role="img" />
+            </div>
+
+            <div className="relative bg-background border border-border rounded-2xl px-6 py-4 text-sm text-foreground leading-relaxed text-center">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[12px] border-b-border"></div>
+              <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[10px] border-b-background"></div>
+              <p>
+                <strong>Bienvenue !</strong><br />
+                Je suis l'assistant personnel d'Arthur Mady.<br />
+                Je peux répondre à toutes les questions que vous pouvez avoir sur lui.<br />
+                Vous pouvez poser vos propres questions ou utiliser une question de suggestion.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowWelcome(false)}
+              className="cursor-pointer rounded-xl bg-accent text-on-accent px-8 py-3 text-sm font-semibold hover:opacity-90 transition-opacity duration-200 shadow-lg"
+            >
+              Allons-y
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

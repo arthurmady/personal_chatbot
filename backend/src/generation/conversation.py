@@ -105,7 +105,8 @@ class Conversation:
         response = await llm.ainvoke(messages)
         elapsed = time.perf_counter() - start
         model_used = getattr(response, 'response_metadata', {}).get('model_name', llm.model_name)
-        logger.debug("Model: %s | Time: %.3fs", model_used, elapsed)
+        logger.info("Model: %s | Time: %.3fs", model_used, elapsed)
+        print(f"[LLM] Model: {model_used} | Time: {elapsed:.3f}s")
 
         parsed = self._parse_response(response.content)
 
