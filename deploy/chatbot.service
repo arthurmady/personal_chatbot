@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/var/www/personal_chatbot/backend
-ExecStart=/var/www/personal_chatbot/venv/bin/python -m uvicorn api:app --host 0.0.0.0 --port 8000
+ExecStart=/var/www/personal_chatbot/venv/bin/python -m uvicorn api:app --host 0.0.0.0 --port 1234
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
