@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import AdminPanel from "./AdminPanel";
+import { Wobbi } from "../character";
 
 function renderSummary(text) {
   return text.split("\n").map((line, i) => {
@@ -31,10 +32,12 @@ function ChatApp() {
   const [messages, setMessages] = useState([]);
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [longWait, setLongWait] = useState(false);
   const [afficherResume, setAfficherResume] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [suggestions, setSuggestions] = useState(SUGGESTIONS_PAR_DEFAUT);
+  const [showWelcome, setShowWelcome] = useState(true);
   const messagesEndRef = useRef(null);
   const API_URL = "";
 
@@ -47,6 +50,16 @@ function ChatApp() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // Timer longue attente
+  useEffect(() => {
+    if (!loading) {
+      setLongWait(false);
+      return;
+    }
+    const timer = setTimeout(() => setLongWait(true), 13000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
 
   const envoyerQuestion = async (texteManuel) => {
@@ -104,12 +117,15 @@ function ChatApp() {
   };
 
   return (
-    <div className="flex h-screen text-foreground">
+    <div className="flex h-screen text-foreground" data-gaze-zone="">
       {/* ---------- ZONE PRINCIPALE ---------- */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h1 className="text-lg font-semibold">Assistant d'Arthur Mady</h1>
+          <div className="flex items-center gap-3">
+            <Wobbi state="idle" size={40} interactive={false} />
+            <h1 className="text-lg font-semibold">MadyGPT : l'assistant personnel d'Arthur Mady</h1>
+          </div>
 
           <div className="flex items-center gap-3">
             <button
@@ -140,18 +156,18 @@ function ChatApp() {
             <p className="text-muted text-sm">Bonjour, je suis l'assistant d'Arthur Mady. Je suis là pour répondre à toutes les questions que vous pouvez avoir sur lui.</p>
           )}
 
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              {msg.role === "bot" && (
-                <img
-                  src="/happy.png?v=2"
-                  alt="Assistant d'Arthur Mady"
-                  className="w-14 h-14 rounded-full shrink-0 mb-1 object-cover"
-                />
-              )}
+          {messages.map((msg, index) => {
+            const isLastBot = msg.role === "bot" && index === messages.length - 1;
+            return (
+              <div
+                key={index}
+                className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                {msg.role === "bot" && (
+                  <div className={`relative z-10 w-20 h-20 shrink-0 mb-1 ${isLastBot ? "" : "hidden"}`}>
+                    <Wobbi state={isLastBot && question.length > 0 ? "sleeping" : "idle"} size={120} interactive={true} tabIndex={-1} role="img" style={{ transform: 'translateX(-12px)' }} />
+                  </div>
+                )}
               <div
                 className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-base leading-relaxed ${
                   msg.role === "user"
@@ -161,7 +177,7 @@ function ChatApp() {
               >
                 {msg.role === "bot" ? (
                   <div className={`chat-bubble prose prose-base max-w-none ${darkMode ? "prose-invert" : ""}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>
                       {msg.content}
                     </ReactMarkdown>
                   </div>
@@ -170,25 +186,24 @@ function ChatApp() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {loading && (
             <div className="flex items-end gap-2 justify-start">
-              <img
-                src="/thinking.png"
-                alt="Assistant d'Arthur Mady"
-                className="w-14 h-14 rounded-full shrink-0 mb-1 object-cover"
-              />
+              <div className="relative z-10 w-20 h-20 shrink-0 mb-1">
+                <Wobbi state="thinking" size={120} interactive={true} tabIndex={-1} role="img" style={{ transform: 'translateX(-12px)' }} />
+              </div>
 
               <div className="bg-card border border-border rounded-2xl px-4 py-2.5 flex items-center gap-3">
                 <span className="text-sm text-muted">
-                  Je fouille dans les informations que j'ai
+                  {longWait ? "   J'ai bientôt la réponse, patientez encore un peu" : "   Je cherche"}
                 </span>
 
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.3s]"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.15s]"></span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce"></span>
+                <div className="flex gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-accent animate-bounce [animation-delay:-0.3s]"></span>
+                  <span className="w-2 h-2 rounded-full bg-accent animate-bounce [animation-delay:-0.15s]"></span>
+                  <span className="w-2 h-2 rounded-full bg-accent animate-bounce"></span>
                 </div>
               </div>
             </div>
@@ -204,7 +219,7 @@ function ChatApp() {
               <button
                 key={index}
                 onClick={() => envoyerSuggestion(texte)}
-                className="cursor-pointer rounded-full border border-border bg-card text-sm text-foreground px-3.5 py-1.5 hover:border-accent hover:text-accent transition-colors duration-200"
+                className="cursor-pointer rounded-full bg-accent text-on-accent text-sm font-medium px-3.5 py-1.5 hover:opacity-80 transition-opacity duration-200"
               >
                 {texte}
               </button>
@@ -222,7 +237,7 @@ function ChatApp() {
               onKeyDown={gererTouche}
               placeholder="Posez votre question..."
               disabled={loading}
-              className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted disabled:opacity-50"
+              className="flex-1 bg-transparent outline-none text-sm placeholder:text-foreground/50 disabled:opacity-50"
             />
             <button
               onClick={() => envoyerQuestion()}
@@ -253,6 +268,35 @@ function ChatApp() {
             </div>
           )}
         </aside>
+      )}
+
+      {/* ---------- POPUP BIENVENUE ---------- */}
+      {showWelcome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="relative bg-card border border-border rounded-3xl shadow-2xl p-8 max-w-2xl w-full mx-4 flex flex-col items-center gap-6 animate-popup">
+            <div className="w-40 h-40">
+              <Wobbi state="idle" size={160} interactive={true} tabIndex={-1} role="img" />
+            </div>
+
+            <div className="relative bg-background border border-border rounded-2xl px-6 py-4 text-sm text-foreground leading-relaxed text-center">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[12px] border-b-border"></div>
+              <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[10px] border-b-background"></div>
+              <p>
+                <strong>Bienvenue !</strong><br />
+                Je suis l'assistant personnel d'Arthur Mady.<br />
+                Je peux répondre à toutes les questions que vous pouvez avoir sur lui.<br />
+                Vous pouvez poser vos propres questions ou utiliser une question de suggestion.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowWelcome(false)}
+              className="cursor-pointer rounded-xl bg-accent text-on-accent px-8 py-3 text-sm font-semibold hover:opacity-90 transition-opacity duration-200 shadow-lg"
+            >
+              Allons-y
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
