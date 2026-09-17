@@ -12,4 +12,4 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 WEAK_PASSWORDS = {"test", "password", "admin", "123456", "secret", "changeme"}
 if ADMIN_PASSWORD and ADMIN_PASSWORD.lower() in WEAK_PASSWORDS:
-    print("⚠️  SECURITY WARNING: ADMIN_PASSWORD is weak. Change it in backend/.env", file=sys.stderr)
+    print("SECURITY WARNING: ADMIN_PASSWORD is weak. Change it in backend/.env", file=sys.stderr)
