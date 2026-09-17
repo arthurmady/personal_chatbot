@@ -23,8 +23,8 @@ function renderSummary(text) {
 
 const SUGGESTIONS_PAR_DEFAUT = [
   "Qui est Arthur Mady ?",
-  "Quels services propose-t-il ?",
   "Quel est son parcours professionnel ?",
+  "Que recherche-t-il comme poste ?",
 ];
 
 function ChatApp() {
@@ -64,7 +64,7 @@ function ChatApp() {
 
   const envoyerQuestion = async (texteManuel) => {
     const texteAEnvoyer = (texteManuel ?? question).trim();
-    if (!texteAEnvoyer || loading) return; // garde anti double-envoi
+    if (!texteAEnvoyer || loading) return;
 
     const nouveauMessageUser = { role: "user", content: texteAEnvoyer };
     setMessages((prev) => [...prev, nouveauMessageUser]);

@@ -1,4 +1,5 @@
 import base64
+import json
 import re
 from pathlib import Path
 
@@ -39,6 +40,53 @@ def _fetch_readme(username: str, repo: str) -> str | None:
         return base64.b64decode(content_b64).decode("utf-8")
 
 
+def _parse_readme(readme: str) -> tuple[str, list[dict]]:
+    lines = readme.strip().split("\n")
+
+    pre_heading_lines = []
+    details = []
+    current_heading = None
+    current_content = []
+    heading_count = 0
+
+    for line in lines:
+        heading_match = re.match(r"^#{1,6}\s+(.+)$", line)
+        if heading_match:
+            if current_heading is not None:
+                content = "\n".join(current_content).strip()
+                if content:
+                    details.append({
+                        "id": current_heading,
+                        "content": content
+                    })
+            current_heading = heading_match.group(1).strip()
+            current_content = []
+            heading_count += 1
+        else:
+            if current_heading is None:
+                stripped = line.strip()
+                if stripped:
+                    pre_heading_lines.append(stripped)
+            else:
+                current_content.append(line)
+
+    if current_heading is not None:
+        content = "\n".join(current_content).strip()
+        if content:
+            details.append({
+                "id": current_heading,
+                "content": content
+            })
+
+    if details:
+        essentiel = details[0]["content"]
+        details = details[1:]
+    else:
+        essentiel = " ".join(pre_heading_lines) if pre_heading_lines else None
+
+    return essentiel, details
+
+
 def fetch_github_readmes(data_dir: str | Path = "data") -> dict:
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -46,23 +94,29 @@ def fetch_github_readmes(data_dir: str | Path = "data") -> dict:
     username = _extract_username(GITHUB_USER_URL)
     repos = _fetch_repos(username)
 
-    sections = []
-    count = 0
+    facts = []
     for repo in repos:
         name = repo["name"]
         readme = _fetch_readme(username, name)
         if readme is None:
             continue
-        cleaned = re.sub(r"^#{1,6}\s+(.+)$", r"**\1**", readme, flags=re.MULTILINE)
-        section = f"## (Projet Github) {name}\n\n{cleaned}"
-        sections.append(section)
-        count += 1
 
-    markdown = "\n\n---\n\n".join(sections)
-    output = data_dir / "github_projects.md"
-    output.write_text(markdown, encoding="utf-8")
+        essentiel, details = _parse_readme(readme)
+        if not essentiel:
+            essentiel = name
 
-    return {"status": "ok", "repos_count": count, "file": str(output)}
+        fact = {
+            "id": name,
+            "tags": ["Projet Github"],
+            "essentiel": essentiel,
+            "detail": details
+        }
+        facts.append(fact)
+
+    output = data_dir / "github_projects.json"
+    output.write_text(json.dumps({"facts": facts}, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    return {"status": "ok", "repos_count": len(facts), "file": str(output)}
 
 
 if __name__ == "__main__":

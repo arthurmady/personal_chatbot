@@ -236,8 +236,8 @@ function DataTab() {
     <div>
       <div className="flex items-center gap-4 mb-4">
         <label className="cursor-pointer rounded-lg bg-accent text-on-accent px-4 py-1.5 text-sm font-medium hover:opacity-90 transition-opacity">
-          {uploading ? "Envoi..." : "Uploader un .md"}
-          <input type="file" accept=".md" onChange={upload} className="hidden" />
+          {uploading ? "Envoi..." : "Uploader un JSON"}
+          <input type="file" accept=".json" onChange={upload} className="hidden" />
         </label>
       </div>
 
