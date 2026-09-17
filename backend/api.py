@@ -8,10 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from langchain_core.documents import Document
-
 from src.generation.conversation import Conversation
-from src.generation.context_builder import extract_topics
+from src.generation.context_builder import load_facts, extract_topics
 from src.fetch_github import fetch_github_readmes
 from src import session_store
 from src.admin_auth import login, verify_token, revoke_token
@@ -47,7 +45,7 @@ class LoginRequest(BaseModel):
     password: str
 
 
-_cached_docs = None
+_cached_facts = None
 _cached_topics = None
 
 _login_attempts: dict[str, list[float]] = defaultdict(list)
@@ -84,23 +82,15 @@ def _check_chat_rate_limit(ip: str) -> bool:
     return True
 
 
-def _load_all_docs_and_topics():
-    global _cached_docs, _cached_topics
-    if _cached_docs is not None:
-        return _cached_docs, _cached_topics
+def _load_facts_and_topics():
+    global _cached_facts, _cached_topics
+    if _cached_facts is not None:
+        return _cached_facts, _cached_topics
 
-    md_files = sorted(Path("data").glob("*.md"))
-    blocks = []
-    topics: list[str] = []
-    for file in md_files:
-        raw = file.read_text(encoding="utf-8")
-        blocks.append(raw)
-        topics.extend(extract_topics(raw))
-
-    full_text = "\n\n---\n\n".join(blocks)
-    _cached_docs = [Document(page_content=full_text)]
-    _cached_topics = topics
-    return _cached_docs, topics
+    facts = load_facts()
+    _cached_facts = facts
+    _cached_topics = extract_topics(facts)
+    return facts, _cached_topics
 
 
 @app.post("/chat", response_model=AskResponse)
@@ -112,8 +102,8 @@ async def chat(request: AskRequest, request_obj: Request):
     is_new = session_id not in sessions
 
     if is_new:
-        all_docs, topics = _load_all_docs_and_topics()
-        sessions[session_id] = Conversation(all_docs, topics)
+        _load_facts_and_topics()
+        sessions[session_id] = Conversation()
         session_store.create_session(session_id)
 
     conv = sessions[session_id]
@@ -199,7 +189,7 @@ DATA_DIR = Path("data")
 @app.get("/admin/data")
 async def admin_list_data_files(_=Depends(verify_token)):
     files = []
-    for f in sorted(DATA_DIR.glob("*.md")):
+    for f in sorted(DATA_DIR.glob("*.json")):
         files.append({
             "name": f.name,
             "size": f.stat().st_size,
@@ -214,15 +204,15 @@ MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 @app.post("/admin/data")
 async def admin_upload_data(file: UploadFile = File(...), _=Depends(verify_token)):
     safe_name = Path(file.name).name
-    if not safe_name.endswith(".md") or safe_name.startswith("."):
-        return {"error": "only .md files allowed"}
+    if not safe_name.endswith(".json") or safe_name.startswith("."):
+        return {"error": "only .json files allowed"}
     content = await file.read()
     if len(content) > MAX_UPLOAD_SIZE:
         return {"error": "file too large (max 10MB)"}
     dest = DATA_DIR / safe_name
     dest.write_bytes(content)
-    global _cached_docs, _cached_topics
-    _cached_docs = None
+    global _cached_facts, _cached_topics
+    _cached_facts = None
     _cached_topics = None
     return {"uploaded": safe_name}
 
@@ -233,10 +223,10 @@ async def admin_delete_data(filename: str, _=Depends(verify_token)):
     target = DATA_DIR / safe_name
     if not target.resolve().is_relative_to(DATA_DIR.resolve()):
         return {"error": "invalid filename"}
-    if target.exists() and target.suffix == ".md":
+    if target.exists() and target.suffix == ".json":
         target.unlink()
-        global _cached_docs, _cached_topics
-        _cached_docs = None
+        global _cached_facts, _cached_topics
+        _cached_facts = None
         _cached_topics = None
         return {"deleted": safe_name}
     return {"error": "file not found"}
@@ -244,9 +234,9 @@ async def admin_delete_data(filename: str, _=Depends(verify_token)):
 
 @app.post("/admin/refresh-github")
 async def admin_refresh_github(_=Depends(verify_token)):
-    global _cached_docs, _cached_topics
+    global _cached_facts, _cached_topics
     result = fetch_github_readmes()
-    _cached_docs = None
+    _cached_facts = None
     _cached_topics = None
     return result
 
