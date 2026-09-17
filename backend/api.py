@@ -203,7 +203,7 @@ MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 
 @app.post("/admin/data")
 async def admin_upload_data(file: UploadFile = File(...), _=Depends(verify_token)):
-    safe_name = Path(file.name).name
+    safe_name = Path(file.filename).name
     if not safe_name.endswith(".json") or safe_name.startswith("."):
         return {"error": "only .json files allowed"}
     content = await file.read()
