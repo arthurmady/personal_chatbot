@@ -2,6 +2,7 @@
   display: block;
   overflow: visible;
   -webkit-tap-highlight-color: transparent;
+  outline: none !important;
 }
 
 .wobbi-character [data-eye] {
@@ -9,12 +10,25 @@
   transform-origin: center;
 }
 
-.wobbi-character:focus {
-  outline: none;
+.wobbi-character:focus,
+.wobbi-character:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
-.wobbi-character:focus-visible {
-  outline: none;
+svg.wobbi-character:focus {
+  outline: none !important;
+}
+
+svg[role="button"]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+svg[role="button"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
