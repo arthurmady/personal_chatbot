@@ -47,6 +47,7 @@ function ChatApp() {
     return saved ? JSON.parse(saved) : SUGGESTIONS_PAR_DEFAUT;
   });
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem("chat_session_id"));
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const API_URL = "";
 
@@ -183,44 +184,58 @@ function ChatApp() {
       {/* ---------- ZONE PRINCIPALE ---------- */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div className="flex items-center gap-3">
+        <header className="flex items-center justify-between px-3 py-3 md:px-6 md:py-4 border-b border-border">
+          <div className="flex items-center gap-2 md:gap-3">
             <Wobbi state="idle" size={40} interactive={false} />
-            <h1 className="text-lg font-semibold">MadyGPT : l'assistant personnel d'Arthur Mady</h1>
+            <h1 className="text-sm md:text-lg font-semibold truncate">MadyGPT<span className="hidden md:inline"> : l'assistant personnel d'Arthur Mady</span></h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3">
             <button
               onClick={nouvelleConversation}
-              className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200"
+              className="cursor-pointer rounded-lg border border-border px-2 py-1.5 md:px-3 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200"
+              title="Nouvelle conversation"
             >
-              Nouvelle conversation
+              <span className="md:hidden">+</span>
+              <span className="hidden md:inline">Nouvelle conversation</span>
             </button>
 
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200"
+              className="cursor-pointer rounded-lg border border-border px-2 py-1.5 md:px-3 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200"
+              title={darkMode ? "Mode clair" : "Mode sombre"}
             >
-              {darkMode ? "Mode clair" : "Mode sombre"}
+              <span className="md:hidden">{darkMode ? "\u2600" : "\u263E"}</span>
+              <span className="hidden md:inline">{darkMode ? "Mode clair" : "Mode sombre"}</span>
             </button>
 
             <a href="/cv_arthur_mady_freelance.pdf" target="_blank" rel="noopener noreferrer">
-              <button className="cursor-pointer rounded-lg bg-accent text-on-accent px-4 py-1.5 text-sm font-medium hover:opacity-90 transition-opacity duration-200">
-                Voir mon CV
+              <button className="cursor-pointer rounded-lg bg-accent text-on-accent px-2.5 py-1.5 md:px-4 text-sm font-medium hover:opacity-90 transition-opacity duration-200">
+                <span className="md:hidden">CV</span>
+                <span className="hidden md:inline">Voir mon CV</span>
               </button>
             </a>
 
             <button
               onClick={() => setAfficherResume(!afficherResume)}
-              className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200"
+              className="cursor-pointer rounded-lg border border-border px-2 py-1.5 md:px-3 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200 hidden md:block"
+              title={afficherResume ? "Masquer résumé" : "Afficher résumé"}
             >
               {afficherResume ? "Masquer résumé" : "Afficher résumé"}
+            </button>
+
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="cursor-pointer rounded-lg border border-border px-2 py-1.5 md:px-3 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200 md:hidden"
+              title="Résumé"
+            >
+              ☰
             </button>
           </div>
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-3 py-3 md:px-6 md:py-4 space-y-3 md:space-y-4">
           {messages.length === 0 && (
             <p className="text-muted text-sm">Présentez-vous et entamez la discussion !</p>
           )}
@@ -233,12 +248,13 @@ function ChatApp() {
                 className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {msg.role === "bot" && (
-                  <div className={`relative z-10 w-20 h-20 shrink-0 mb-1 ${isLastBot ? "" : "hidden"}`}>
-                    <Wobbi state={isLastBot && question.length > 0 ? "sleeping" : "idle"} size={120} interactive={true} tabIndex={-1} role="img" style={{ transform: 'translateX(-12px)' }} />
+                  <div className={`relative z-10 shrink-0 mb-1 ${isLastBot ? "" : "hidden"}`}>
+                    <Wobbi state={isLastBot && question.length > 0 ? "sleeping" : "idle"} size={60} interactive={isLastBot} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} className="md:hidden" style={{ transform: 'translateX(-8px)' }} />
+                    <Wobbi state={isLastBot && question.length > 0 ? "sleeping" : "idle"} size={120} interactive={isLastBot} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} className="hidden md:block" style={{ transform: 'translateX(-12px)' }} />
                   </div>
                 )}
               <div
-                className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-base leading-relaxed ${
+                className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base leading-relaxed ${
                   msg.role === "user"
                     ? "bg-accent text-on-accent"
                     : "bg-card text-foreground border border-border"
@@ -260,12 +276,13 @@ function ChatApp() {
 
           {loading && (
             <div className="flex items-end gap-2 justify-start">
-              <div className="relative z-10 w-20 h-20 shrink-0 mb-1">
-                <Wobbi state="thinking" size={120} interactive={true} tabIndex={-1} role="img" style={{ transform: 'translateX(-12px)' }} />
+              <div className="relative z-10 shrink-0 mb-1">
+                <Wobbi state="thinking" size={60} interactive={false} className="md:hidden" style={{ transform: 'translateX(-8px)' }} />
+                <Wobbi state="thinking" size={120} interactive={false} className="hidden md:block" style={{ transform: 'translateX(-12px)' }} />
               </div>
 
-              <div className="bg-card border border-border rounded-2xl px-4 py-2.5 flex items-center gap-3">
-                <span className="text-sm text-muted">
+              <div className="bg-card border border-border rounded-2xl px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-2 md:gap-3">
+                <span className="text-xs md:text-sm text-muted">
                   {longWait ? "   J'ai bientôt la réponse, patientez encore un peu" : "   Je cherche"}
                 </span>
 
@@ -283,12 +300,12 @@ function ChatApp() {
 
         {/* Suggestions de questions */}
         {suggestions.length > 0 && !loading && (
-          <div className="px-6 pb-2 flex flex-wrap gap-2">
+          <div className="px-3 pb-2 md:px-6 flex flex-wrap gap-1.5 md:gap-2">
             {suggestions.map((texte, index) => (
               <button
                 key={index}
                 onClick={() => envoyerSuggestion(texte)}
-                className="cursor-pointer rounded-full bg-accent text-on-accent text-sm font-medium px-3.5 py-1.5 hover:opacity-80 transition-opacity duration-200"
+                className="cursor-pointer rounded-full bg-accent text-on-accent text-xs md:text-sm font-medium px-2.5 py-1 md:px-3.5 md:py-1.5 hover:opacity-80 transition-opacity duration-200"
               >
                 {texte}
               </button>
@@ -297,8 +314,8 @@ function ChatApp() {
         )}
 
         {/* Zone de saisie */}
-        <div className="border-t border-border px-6 py-4">
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5 focus-within:border-accent transition-colors duration-200">
+        <div className="border-t border-border px-3 py-3 md:px-6 md:py-4">
+          <div className="flex items-center gap-2 md:gap-3 rounded-xl border border-border bg-card px-3 py-2 md:px-4 md:py-2.5 focus-within:border-accent transition-colors duration-200">
             <input
               type="text"
               value={question}
@@ -311,7 +328,7 @@ function ChatApp() {
             <button
               onClick={() => envoyerQuestion()}
               disabled={loading || !question.trim()}
-              className="cursor-pointer rounded-lg bg-accent text-on-accent px-4 py-1.5 text-sm font-medium hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="cursor-pointer rounded-lg bg-accent text-on-accent px-3 py-1.5 md:px-4 text-sm font-medium hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Envoyer
             </button>
@@ -320,11 +337,31 @@ function ChatApp() {
       </div>
 
       {/* ---------- SIDEBAR RÉSUMÉ ---------- */}
+      {/* Overlay mobile */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {afficherResume && (
-        <aside className="w-72 shrink-0 border-l border-border bg-card px-4 py-4 overflow-y-auto">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">
-            Résumé
-          </h2>
+        <aside className={`
+          fixed inset-y-0 right-0 z-50 w-72 shrink-0 border-l border-border bg-card px-4 py-4 overflow-y-auto transition-transform duration-300
+          md:static md:translate-x-0
+          ${sidebarOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"}
+        `}>
+          <div className="flex items-center justify-between mb-3 md:block">
+            <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">
+              Résumé
+            </h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="cursor-pointer text-muted hover:text-foreground md:hidden text-lg"
+            >
+              ✕
+            </button>
+          </div>
           {resumes.length === 0 ? (
             <p className="text-sm text-muted">Aucun résumé pour l'instant.</p>
           ) : (
@@ -341,26 +378,26 @@ function ChatApp() {
 
       {/* ---------- POPUP BIENVENUE ---------- */}
       {showWelcome && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="relative bg-card border border-border rounded-3xl shadow-2xl p-8 max-w-2xl w-full mx-4 flex flex-col items-center gap-6 animate-popup">
-            <div className="w-40 h-40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="relative bg-card border border-border rounded-3xl shadow-2xl p-6 md:p-8 max-w-lg md:max-w-2xl w-full flex flex-col items-center gap-4 md:gap-6 animate-popup">
+            <div className="w-24 h-24 md:w-40 md:h-40">
               <Wobbi state="idle" size={160} interactive={true} tabIndex={-1} role="img" />
             </div>
 
-            <div className="relative bg-background border border-border rounded-2xl px-6 py-4 text-sm text-foreground leading-relaxed text-center">
+            <div className="relative bg-background border border-border rounded-2xl px-4 py-3 md:px-6 md:py-4 text-sm text-foreground leading-relaxed text-center">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[12px] border-b-border"></div>
               <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[10px] border-b-background"></div>
               <p>
                 <strong>Bienvenue !</strong><br />
                 Je suis l'assistant personnel d'Arthur Mady.<br />
-                Je peux répondre à toutes les questions que vous pouvez avoir sur lui.<br />
-                Vous pouvez poser vos propres questions ou utiliser une question de suggestion.
+                <span className="hidden md:inline">Je peux répondre à toutes les questions que vous pouvez avoir sur lui.<br /></span>
+                Vous pouvez poser vos propres questions ou utiliser une suggestion.
               </p>
             </div>
 
             <button
               onClick={() => setShowWelcome(false)}
-              className="cursor-pointer rounded-xl bg-accent text-on-accent px-8 py-3 text-sm font-semibold hover:opacity-90 transition-opacity duration-200 shadow-lg"
+              className="cursor-pointer rounded-xl bg-accent text-on-accent px-6 py-2.5 md:px-8 md:py-3 text-sm font-semibold hover:opacity-90 transition-opacity duration-200 shadow-lg"
             >
               Allons-y
             </button>

@@ -33,7 +33,7 @@ function TabButton({ label, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`cursor-pointer px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+      className={`cursor-pointer px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-medium rounded-lg transition-colors duration-200 whitespace-nowrap ${
         active
           ? "bg-accent text-on-accent"
           : "text-muted hover:text-foreground hover:bg-card"
@@ -74,7 +74,7 @@ function LoginForm({ onLogin }) {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <form onSubmit={submit} className="bg-card border border-border rounded-2xl p-8 w-80 space-y-4">
+      <form onSubmit={submit} className="bg-card border border-border rounded-2xl p-6 md:p-8 w-full max-w-sm space-y-4">
         <h2 className="text-lg font-semibold text-foreground text-center">Connexion Admin</h2>
         <input
           type="password"
@@ -109,7 +109,7 @@ function StatsTab() {
   if (!stats) return <p className="text-muted text-sm">Chargement...</p>;
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
       {[
         { label: "Sessions", value: stats.total_sessions },
         { label: "Messages totaux", value: stats.total_messages },
@@ -169,7 +169,7 @@ function SessionsTab() {
           {selected.messages?.map((msg, i) => (
             <div
               key={i}
-              className={`rounded-xl px-4 py-2.5 max-w-[80%] ${
+              className={`rounded-xl px-3 py-2 md:px-4 md:py-2.5 max-w-[90%] md:max-w-[80%] ${
                 msg.role === "user"
                   ? "bg-accent text-on-accent ml-auto"
                   : "bg-card border border-border text-foreground"
@@ -194,7 +194,7 @@ function SessionsTab() {
           {sessions.map((s) => (
             <div
               key={s.session_id}
-              className="flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3"
+              className="flex flex-col sm:flex-row sm:items-center justify-between bg-card border border-border rounded-xl px-3 py-3 md:px-4 gap-2"
             >
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">
@@ -281,7 +281,7 @@ function DataTab() {
           {files.map((f) => (
             <div
               key={f.name}
-              className="flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3"
+              className="flex flex-col sm:flex-row sm:items-center justify-between bg-card border border-border rounded-xl px-3 py-3 md:px-4 gap-2"
             >
               <div>
                 <p className="text-sm font-medium text-foreground">{f.name}</p>
@@ -377,8 +377,8 @@ export default function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <h1 className="text-lg font-semibold">Panel Admin</h1>
+      <header className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 border-b border-border">
+        <h1 className="text-base md:text-lg font-semibold">Panel Admin</h1>
         <div className="flex gap-4">
           <button
             onClick={logout}
@@ -389,8 +389,8 @@ export default function AdminPanel() {
         </div>
       </header>
 
-      <div className="px-6 py-4">
-        <div className="flex gap-2 mb-6 border-b border-border pb-3">
+      <div className="px-4 py-3 md:px-6 md:py-4">
+        <div className="flex gap-1.5 md:gap-2 mb-4 md:mb-6 border-b border-border pb-3 overflow-x-auto">
           <TabButton label="Stats" active={tab === "stats"} onClick={() => setTab("stats")} />
           <TabButton label="Sessions" active={tab === "sessions"} onClick={() => setTab("sessions")} />
           <TabButton label="Données" active={tab === "data"} onClick={() => setTab("data")} />
