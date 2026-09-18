@@ -22,13 +22,14 @@ def _save(sessions: dict):
     SESSIONS_FILE.write_text(json.dumps(sessions, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def create_session(session_id: str):
+def create_session(session_id: str, user_agent: str = ""):
     with _lock:
         sessions = load_sessions()
         sessions[session_id] = {
             "created_at": _now(),
             "messages": [],
             "summary": "",
+            "user_agent": user_agent,
         }
         _save(sessions)
 
@@ -77,6 +78,7 @@ def list_sessions() -> list[dict]:
             "created_at": data.get("created_at", 0),
             "message_count": msg_count,
             "summary": data.get("summary", ""),
+            "user_agent": data.get("user_agent", ""),
         })
     result.sort(key=lambda s: s["created_at"], reverse=True)
     return result

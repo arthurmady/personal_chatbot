@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 import os
 import time
@@ -57,6 +58,43 @@ MAX_CHAT_ATTEMPTS = 10
 CHAT_WINDOW = 60
 
 
+def _parse_user_agent(ua: str | None) -> dict:
+    if not ua:
+        return {"browser": "unknown", "os": "unknown", "device": "unknown", "raw": ""}
+
+    browser = "unknown"
+    if "Firefox/" in ua:
+        browser = "Firefox"
+    elif "Edg/" in ua:
+        browser = "Edge"
+    elif "Chrome/" in ua:
+        browser = "Chrome"
+    elif "Safari/" in ua and "Chrome" not in ua:
+        browser = "Safari"
+
+    os_name = "unknown"
+    if "Windows NT 10" in ua:
+        os_name = "Windows 10+"
+    elif "Windows" in ua:
+        os_name = "Windows"
+    elif "Mac OS X" in ua:
+        os_name = "macOS"
+    elif "Linux" in ua and "Android" not in ua:
+        os_name = "Linux"
+    elif "Android" in ua:
+        os_name = "Android"
+    elif "iPhone" in ua or "iPad" in ua:
+        os_name = "iOS"
+
+    device = "desktop"
+    if "Mobile" in ua or "Android" in ua and "Mobile" in ua:
+        device = "mobile"
+    elif "iPhone" in ua or "iPad" in ua:
+        device = "mobile"
+
+    return {"browser": browser, "os": os_name, "device": device, "raw": ua}
+
+
 def _get_client_ip(request_obj: Request) -> str:
     forwarded = request_obj.headers.get("x-forwarded-for")
     if forwarded:
@@ -93,6 +131,22 @@ def _load_facts_and_topics():
     return facts, _cached_topics
 
 
+@app.get("/session/{session_id}")
+async def get_session(session_id: str):
+    data = session_store.get_session(session_id)
+    if not data:
+        return Response(status_code=404, content="session not found")
+    return {
+        "session_id": session_id,
+        "messages": [
+            {"role": m["role"], "content": m["content"]}
+            for m in data.get("messages", [])
+        ],
+        "summary": data.get("summary", ""),
+        "user_agent": data.get("user_agent", ""),
+    }
+
+
 @app.post("/chat", response_model=AskResponse)
 async def chat(request: AskRequest, request_obj: Request):
     ip = _get_client_ip(request_obj)
@@ -101,10 +155,12 @@ async def chat(request: AskRequest, request_obj: Request):
     session_id = request.session_id or str(uuid.uuid4())
     is_new = session_id not in sessions
 
+    ua_info = _parse_user_agent(request_obj.headers.get("user-agent"))
+
     if is_new:
         _load_facts_and_topics()
         sessions[session_id] = Conversation()
-        session_store.create_session(session_id)
+        session_store.create_session(session_id, user_agent=ua_info["raw"])
 
     conv = sessions[session_id]
 

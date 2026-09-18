@@ -2,6 +2,29 @@ import { useState, useEffect } from "react";
 
 const API_URL = "";
 
+function parseUserAgent(ua) {
+  if (!ua) return null;
+  let browser = "unknown";
+  if (ua.includes("Firefox/")) browser = "Firefox";
+  else if (ua.includes("Edg/")) browser = "Edge";
+  else if (ua.includes("Chrome/")) browser = "Chrome";
+  else if (ua.includes("Safari/") && !ua.includes("Chrome")) browser = "Safari";
+
+  let os = "unknown";
+  if (ua.includes("Windows NT 10")) os = "Windows 10+";
+  else if (ua.includes("Windows")) os = "Windows";
+  else if (ua.includes("Mac OS X")) os = "macOS";
+  else if (ua.includes("Linux") && !ua.includes("Android")) os = "Linux";
+  else if (ua.includes("Android")) os = "Android";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+
+  let device = "desktop";
+  if ((ua.includes("Mobile") || ua.includes("Android")) && !ua.includes("Tablet")) device = "mobile";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) device = "mobile";
+
+  return `${browser} on ${os} — ${device}`;
+}
+
 async function authFetch(url, options = {}) {
   return fetch(url, { ...options, credentials: "include", headers: options.headers });
 }
@@ -137,6 +160,11 @@ function SessionsTab() {
         >
           ← Retour à la liste
         </button>
+        {selected.user_agent && (
+          <p className="text-xs text-muted mb-3">
+            User-Agent : {parseUserAgent(selected.user_agent) || selected.user_agent}
+          </p>
+        )}
         <div className="space-y-2">
           {selected.messages?.map((msg, i) => (
             <div
@@ -175,6 +203,11 @@ function SessionsTab() {
                 <p className="text-xs text-muted">
                   {formatDate(s.created_at)} — {s.message_count} messages
                 </p>
+                {s.user_agent && (
+                  <p className="text-xs text-muted mt-0.5">
+                    {parseUserAgent(s.user_agent) || s.user_agent}
+                  </p>
+                )}
               </div>
               <div className="flex gap-2 ml-4">
                 <button

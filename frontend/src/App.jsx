@@ -29,15 +29,24 @@ const SUGGESTIONS_PAR_DEFAUT = [
 
 function ChatApp() {
   const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState([]);
-  const [resumes, setResumes] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    const saved = localStorage.getItem("chat_messages");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [resumes, setResumes] = useState(() => {
+    const saved = localStorage.getItem("chat_resumes");
+    return saved ? JSON.parse(saved) : [];
+  });
   const [loading, setLoading] = useState(false);
   const [longWait, setLongWait] = useState(false);
   const [afficherResume, setAfficherResume] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
-  const [suggestions, setSuggestions] = useState(SUGGESTIONS_PAR_DEFAUT);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [sessionId, setSessionId] = useState(() => localStorage.getItem("chat_session_id"));
+  const [suggestions, setSuggestions] = useState(() => {
+    const saved = localStorage.getItem("chat_suggestions");
+    return saved ? JSON.parse(saved) : SUGGESTIONS_PAR_DEFAUT;
+  });
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem("chat_session_id"));
   const messagesEndRef = useRef(null);
   const API_URL = "";
 
@@ -60,6 +69,46 @@ function ChatApp() {
     const timer = setTimeout(() => setLongWait(true), 13000);
     return () => clearTimeout(timer);
   }, [loading]);
+
+  // Sauvegarde dans localStorage à chaque changement
+  useEffect(() => {
+    localStorage.setItem("chat_messages", JSON.stringify(messages));
+  }, [messages]);
+
+  useEffect(() => {
+    localStorage.setItem("chat_resumes", JSON.stringify(resumes));
+  }, [resumes]);
+
+  useEffect(() => {
+    localStorage.setItem("chat_suggestions", JSON.stringify(suggestions));
+  }, [suggestions]);
+
+  // Restauration de la session depuis le backend au montage
+  useEffect(() => {
+    const sid = localStorage.getItem("chat_session_id");
+    if (!sid) return;
+
+    fetch(`${API_URL}/session/${sid}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("session not found");
+        return res.json();
+      })
+      .then((data) => {
+        if (data.messages && data.messages.length > 0) {
+          setMessages(data.messages);
+          setSessionId(data.session_id);
+          if (data.summary) {
+            setResumes([data.summary]);
+          }
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem("chat_session_id");
+        localStorage.removeItem("chat_messages");
+        localStorage.removeItem("chat_resumes");
+        localStorage.removeItem("chat_suggestions");
+      });
+  }, []);
 
 
   const envoyerQuestion = async (texteManuel) => {
@@ -88,6 +137,7 @@ function ChatApp() {
       // On ne met à jour le session_id que si l'appel a réussi,
       // pour ne jamais écraser une session valide avec une erreur.
       setSessionId(data.session_id);
+      localStorage.setItem("chat_session_id", data.session_id);
 
       setMessages((prev) => [...prev, { role: "bot", content: data.response }]);
 
@@ -112,6 +162,18 @@ function ChatApp() {
     envoyerQuestion(texte);
   };
 
+  const nouvelleConversation = () => {
+    localStorage.removeItem("chat_session_id");
+    localStorage.removeItem("chat_messages");
+    localStorage.removeItem("chat_resumes");
+    localStorage.removeItem("chat_suggestions");
+    setSessionId(null);
+    setMessages([]);
+    setResumes([]);
+    setSuggestions(SUGGESTIONS_PAR_DEFAUT);
+    setShowWelcome(true);
+  };
+
   const gererTouche = (e) => {
     if (e.key === "Enter" && !loading) envoyerQuestion();
   };
@@ -128,6 +190,13 @@ function ChatApp() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={nouvelleConversation}
+              className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200"
+            >
+              Nouvelle conversation
+            </button>
+
             <button
               onClick={() => setDarkMode(!darkMode)}
               className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200"
@@ -153,7 +222,7 @@ function ChatApp() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {messages.length === 0 && (
-            <p className="text-muted text-sm">Bonjour, je suis l'assistant d'Arthur Mady. Je suis là pour répondre à toutes les questions que vous pouvez avoir sur lui.</p>
+            <p className="text-muted text-sm">Présentez-vous et entamez la discussion !</p>
           )}
 
           {messages.map((msg, index) => {
