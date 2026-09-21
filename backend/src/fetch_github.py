@@ -79,12 +79,12 @@ def _parse_readme(readme: str) -> tuple[str, list[dict]]:
             })
 
     if details:
-        essentiel = details[0]["content"]
+        essential = details[0]["content"]
         details = details[1:]
     else:
-        essentiel = " ".join(pre_heading_lines) if pre_heading_lines else None
+        essential = " ".join(pre_heading_lines) if pre_heading_lines else None
 
-    return essentiel, details
+    return essential, details
 
 
 def fetch_github_readmes(data_dir: str | Path = "data") -> dict:
@@ -101,15 +101,15 @@ def fetch_github_readmes(data_dir: str | Path = "data") -> dict:
         if readme is None:
             continue
 
-        essentiel, details = _parse_readme(readme)
-        if not essentiel:
-            essentiel = name
+        essential, details = _parse_readme(readme)
+        if not essential:
+            essential = name
 
         fact = {
             "id": name,
             "tags": ["Projet Github"],
-            "essentiel": essentiel,
-            "detail": details
+            "essential": essential,
+            "details": details
         }
         facts.append(fact)
 

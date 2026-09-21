@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Politique de confidentialité — MadyGPT</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
+  <style>
+    :root {
+      --bg: #0F172A;
+      --fg: #F8FAFC;
+      --accent: #7A9B6D;
+      --border: #334155;
+      --muted: #94A3B8;
+    }
+    body {
+      font-family: "Inter", -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.7;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+    h2 { font-size: 1.25rem; color: var(--accent); margin-top: 2rem; margin-bottom: 0.5rem; }
+    p, li { font-size: 0.95rem; color: var(--fg); }
+    .date { color: var(--muted); font-size: 0.85rem; margin-bottom: 2rem; }
+    a { color: var(--accent); }
+    ul { padding-left: 1.2rem; }
+    li { margin-bottom: 0.4rem; }
+    .back { display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 1.5rem; color: var(--muted); text-decoration: none; font-size: 0.9rem; padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 8px; transition: color 0.2s, border-color 0.2s; }
+    .back:hover { color: var(--accent); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <a class="back" href="/">&larr; Retour à MadyGPT</a>
+
+  <h1>Politique de confidentialité</h1>
+  <p class="date">Dernière mise à jour : 21 septembre 2026</p>
+
+  <h2>1. Responsable du traitement</h2>
+  <p>Le site <strong>MadyGPT</strong> est édité par Arthur Mady, développeur et ingénieur en data science / intelligence artificielle.</p>
+  <p>Contact : <a href="mailto:madyarthur@gmail.com">madyarthur@gmail.com</a></p>
+
+  <h2>2. Données collectées</h2>
+  <p>Les données personnelles suivantes sont collectées dans le cadre de l'utilisation du chatbot :</p>
+  <ul>
+    <li><strong>Messages de conversation</strong> : les questions posées et les réponses générées par l'assistant.</li>
+    <li><strong>Identifiant de session</strong> : un identifiant unique (UUID) pour maintenir le contexte de la conversation.</li>
+    <li><strong>Données de navigation</strong> : navigateur, système d'exploitation et type d'appareil (via le header User-Agent).</li>
+    <li><strong>Adresse IP</strong> : utilisée uniquement pour la protection contre les abus (rate limiting), non stockée de manière persistante.</li>
+  </ul>
+
+  <h2>3. Finalité du traitement</h2>
+  <p>Ces données sont collectées pour :</p>
+  <ul>
+    <li>Fournir un service de conversation personnalisé présentant le parcours d'Arthur Mady.</li>
+    <li>Maintenir le contexte de la conversation entre les échanges.</li>
+    <li>Protéger le service contre les abus et les requêtes excessives.</li>
+    <li>Permettre l'administration et l'amélioration du service.</li>
+  </ul>
+
+  <h2>4. Base légale</h2>
+  <p>Le traitement repose sur le <strong>consentement</strong> de l'utilisateur : en utilisant le chatbot, vous acceptez la collecte des données nécessaires au fonctionnement du service.</p>
+
+  <h2>5. Durée de conservation</h2>
+  <ul>
+    <li><strong>Messages et sessions</strong> : conservés jusqu'à leur suppression par l'administrateur.</li>
+    <li><strong>Adresses IP (rate limiting)</strong> : stockées en mémoire volatile, supprimées au redémarrage du serveur.</li>
+    <li><strong>Données de navigation</strong> : non conservées de manière persistante côté serveur.</li>
+  </ul>
+
+  <h2>6. Partage des données</h2>
+  <p>Aucune donnée personnelle n'est partagée avec des tiers, sauf :</p>
+  <ul>
+    <li><strong>OpenRouter</strong> : les messages de conversation sont transmis à l'API d'OpenRouter pour générer les réponses. Les conditions de ce fournisseur s'appliquent (<a href="https://openrouter.ai/privacy" target="_blank" rel="noopener noreferrer">politique OpenRouter</a>).</li>
+  </ul>
+
+  <h2>7. Cookies et stockage local</h2>
+  <ul>
+    <li><strong>admin_token</strong> : cookie HttpOnly utilisé uniquement pour l'authentification de l'administrateur. Non utilisé pour les visiteurs.</li>
+    <li><strong>localStorage</strong> : utilisé côté navigateur pour stocker les messages, résumés et suggestions de conversation. Ce stockage reste local à votre appareil et n'est pas transmis au serveur.</li>
+  </ul>
+
+  <h2>8. Vos droits</h2>
+  <p>Conformément au Règlement Général sur la Protection des Données (RGPD), vous disposez des droits suivants :</p>
+  <ul>
+    <li><strong>Droit d'accès</strong> : obtenir une copie de vos données.</li>
+    <li><strong>Droit de rectification</strong> : corriger des données inexactes.</li>
+    <li><strong>Droit à l'effacement</strong> : demander la suppression de vos données.</li>
+    <li><strong>Droit à la portabilité</strong> : recevoir vos données dans un format structuré.</li>
+  </ul>
+  <p>Pour exercer ces droits, contactez : <a href="mailto:madyarthur@gmail.com">madyarthur@gmail.com</a></p>
+
+  <h2>9. Sécurité</h2>
+  <p>Les mesures suivantes sont mises en œuvre pour protéger vos données :</p>
+  <ul>
+    <li>Authentification par cookie HttpOnly avec expiration automatique.</li>
+    <li>Protection contre les attaques par injection et les parcours de fichiers.</li>
+    <li>Limitation du débit pour prévenir les abus.</li>
+    <li>Restriction des origines CORS autorisées.</li>
+  </ul>
+
+  <h2>10. Modifications</h2>
+  <p>Cette politique peut être mise à jour à tout moment. La date de dernière mise à jour est indiquée en haut de cette page.</p>
+</body>
+</html>

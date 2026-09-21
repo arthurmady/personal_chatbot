@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OMNIROUTE_BASE_URL = os.getenv("OMNIROUTE_BASE_URL")
-OMNIROUTE_MODEL = os.getenv("OMNIROUTE_MODEL")
-OMNIROUTE_API_KEY = os.getenv("OMNIROUTE_API_KEY")
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GITHUB_USER_URL = os.getenv("GITHUB_USER_URL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 

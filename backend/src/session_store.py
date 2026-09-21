@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import time
 from pathlib import Path
 from threading import Lock
@@ -19,7 +21,14 @@ def load_sessions() -> dict:
 
 def _save(sessions: dict):
     SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SESSIONS_FILE.write_text(json.dumps(sessions, ensure_ascii=False, indent=2), encoding="utf-8")
+    fd, tmp_path = tempfile.mkstemp(dir=SESSIONS_FILE.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(sessions, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, SESSIONS_FILE)
+    except BaseException:
+        os.unlink(tmp_path)
+        raise
 
 
 def create_session(session_id: str, user_agent: str = ""):
@@ -28,7 +37,9 @@ def create_session(session_id: str, user_agent: str = ""):
         sessions[session_id] = {
             "created_at": _now(),
             "messages": [],
-            "summary": "",
+            "summaries": [],
+            "essentials_done": [],
+            "details_done": [],
             "user_agent": user_agent,
         }
         _save(sessions)
@@ -38,7 +49,7 @@ def append_message(session_id: str, role: str, content: str, response_meta: dict
     with _lock:
         sessions = load_sessions()
         if session_id not in sessions:
-            sessions[session_id] = {"created_at": _now(), "messages": [], "summary": ""}
+            sessions[session_id] = {"created_at": _now(), "messages": [], "summaries": []}
         entry = {"role": role, "content": content, "timestamp": _now()}
         if response_meta:
             entry["meta"] = response_meta
@@ -46,11 +57,16 @@ def append_message(session_id: str, role: str, content: str, response_meta: dict
         _save(sessions)
 
 
-def update_summary(session_id: str, summary: str):
+def append_summary(session_id: str, turn_summary: str, essentials_done: list[str] = None, details_done: list[str] = None):
     with _lock:
         sessions = load_sessions()
         if session_id in sessions:
-            sessions[session_id]["summary"] = summary
+            if turn_summary:
+                sessions[session_id].setdefault("summaries", []).append(turn_summary)
+            if essentials_done is not None:
+                sessions[session_id]["essentials_done"] = essentials_done
+            if details_done is not None:
+                sessions[session_id]["details_done"] = details_done
             _save(sessions)
 
 
@@ -77,7 +93,7 @@ def list_sessions() -> list[dict]:
             "session_id": sid,
             "created_at": data.get("created_at", 0),
             "message_count": msg_count,
-            "summary": data.get("summary", ""),
+            "summaries": data.get("summaries", []),
             "user_agent": data.get("user_agent", ""),
         })
     result.sort(key=lambda s: s["created_at"], reverse=True)

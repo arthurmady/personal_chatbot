@@ -1,19 +1,18 @@
-import re
-from pathlib import Path
 import os
 import time
 import uuid
 from collections import defaultdict
-from fastapi import FastAPI, UploadFile, File, Depends, Request, Cookie
+from pathlib import Path
+
+from fastapi import FastAPI, Depends, Request, Cookie, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from src.generation.conversation import Conversation
-from src.generation.context_builder import load_facts, extract_topics
-from src.fetch_github import fetch_github_readmes
 from src import session_store
 from src.admin_auth import login, verify_token, revoke_token
+from src.fetch_github import fetch_github_readmes
+from src.generation.conversation import Conversation
 
 
 app = FastAPI()
@@ -23,8 +22,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type"],
 )
 
 sessions: dict[str, Conversation] = {}
@@ -33,6 +32,10 @@ sessions: dict[str, Conversation] = {}
 class AskRequest(BaseModel):
     session_id: str | None = None
     query: str
+
+    def model_post_init(self, __context):
+        if len(self.query) > 2000:
+            raise ValueError("question trop longue (max 2000 caractères)")
 
 
 class AskResponse(BaseModel):
@@ -45,9 +48,6 @@ class AskResponse(BaseModel):
 class LoginRequest(BaseModel):
     password: str
 
-
-_cached_facts = None
-_cached_topics = None
 
 _login_attempts: dict[str, list[float]] = defaultdict(list)
 MAX_LOGIN_ATTEMPTS = 5
@@ -87,18 +87,13 @@ def _parse_user_agent(ua: str | None) -> dict:
         os_name = "iOS"
 
     device = "desktop"
-    if "Mobile" in ua or "Android" in ua and "Mobile" in ua:
-        device = "mobile"
-    elif "iPhone" in ua or "iPad" in ua:
+    if "Mobile" in ua or "Android" in ua or "iPhone" in ua or "iPad" in ua:
         device = "mobile"
 
     return {"browser": browser, "os": os_name, "device": device, "raw": ua}
 
 
 def _get_client_ip(request_obj: Request) -> str:
-    forwarded = request_obj.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
     return request_obj.client.host
 
 
@@ -120,17 +115,6 @@ def _check_chat_rate_limit(ip: str) -> bool:
     return True
 
 
-def _load_facts_and_topics():
-    global _cached_facts, _cached_topics
-    if _cached_facts is not None:
-        return _cached_facts, _cached_topics
-
-    facts = load_facts()
-    _cached_facts = facts
-    _cached_topics = extract_topics(facts)
-    return facts, _cached_topics
-
-
 @app.get("/session/{session_id}")
 async def get_session(session_id: str):
     data = session_store.get_session(session_id)
@@ -142,7 +126,7 @@ async def get_session(session_id: str):
             {"role": m["role"], "content": m["content"]}
             for m in data.get("messages", [])
         ],
-        "summary": data.get("summary", ""),
+        "summaries": data.get("summaries", []),
         "user_agent": data.get("user_agent", ""),
     }
 
@@ -158,9 +142,15 @@ async def chat(request: AskRequest, request_obj: Request):
     ua_info = _parse_user_agent(request_obj.headers.get("user-agent"))
 
     if is_new:
-        _load_facts_and_topics()
-        sessions[session_id] = Conversation()
-        session_store.create_session(session_id, user_agent=ua_info["raw"])
+        stored = session_store.get_session(session_id)
+        if stored:
+            conv = Conversation()
+            conv.essentials_done = set(stored.get("essentials_done", []))
+            conv.details_done = set(stored.get("details_done", []))
+            sessions[session_id] = conv
+        else:
+            sessions[session_id] = Conversation()
+            session_store.create_session(session_id, user_agent=ua_info["raw"])
 
     conv = sessions[session_id]
 
@@ -171,11 +161,12 @@ async def chat(request: AskRequest, request_obj: Request):
     session_store.append_message(session_id, "bot", result["response"], {
         "suggestions": result["suggestions"],
     })
-    session_store.update_summary(session_id, conv.summary)
+    turn_summary = result.get("turn_summary", "")
+    session_store.append_summary(session_id, turn_summary, list(conv.essentials_done), list(conv.details_done))
 
     return {
         "response": result["response"],
-        "summary": conv.summary,
+        "summary": turn_summary,
         "suggestions": result["suggestions"],
         "session_id": session_id,
     }
@@ -190,7 +181,7 @@ async def admin_login(request: LoginRequest, response: Response, request_obj: Re
         return Response(status_code=429, content="too many attempts, try later")
     token = login(request.password)
     if not token:
-        return {"error": "wrong password"}
+        return Response(status_code=401, content="wrong password")
     secure = not os.getenv("DEV")
     response.set_cookie(
         key="admin_token",
@@ -266,10 +257,9 @@ async def admin_upload_data(file: UploadFile = File(...), _=Depends(verify_token
     if len(content) > MAX_UPLOAD_SIZE:
         return {"error": "file too large (max 10MB)"}
     dest = DATA_DIR / safe_name
+    if not dest.resolve().is_relative_to(DATA_DIR.resolve()):
+        return {"error": "invalid filename"}
     dest.write_bytes(content)
-    global _cached_facts, _cached_topics
-    _cached_facts = None
-    _cached_topics = None
     return {"uploaded": safe_name}
 
 
@@ -281,20 +271,23 @@ async def admin_delete_data(filename: str, _=Depends(verify_token)):
         return {"error": "invalid filename"}
     if target.exists() and target.suffix == ".json":
         target.unlink()
-        global _cached_facts, _cached_topics
-        _cached_facts = None
-        _cached_topics = None
         return {"deleted": safe_name}
     return {"error": "file not found"}
 
 
 @app.post("/admin/refresh-github")
 async def admin_refresh_github(_=Depends(verify_token)):
-    global _cached_facts, _cached_topics
-    result = fetch_github_readmes()
-    _cached_facts = None
-    _cached_topics = None
-    return result
+    return fetch_github_readmes()
+
+
+# ── Static pages ────────────────────────────────────────────────
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/politique-confidentialite.html")
+async def serve_privacy_policy():
+    return FileResponse(STATIC_DIR / "politique-confidentialite.html", headers={"Cache-Control": "no-cache"})
 
 
 # ── Frontend catch-all ───────────────────────────────────────────

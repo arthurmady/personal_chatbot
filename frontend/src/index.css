@@ -106,9 +106,3 @@ body {
   animation: popup-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.wobbi-character:focus,
-.wobbi-character:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
