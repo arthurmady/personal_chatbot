@@ -49,7 +49,6 @@ function ChatApp() {
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem("chat_session_id"));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef(null);
-  const API_URL = "";
 
   // Applique/enlève la classe "light" sur <html> selon le mode
   useEffect(() => {
@@ -74,22 +73,16 @@ function ChatApp() {
   // Sauvegarde dans localStorage à chaque changement
   useEffect(() => {
     localStorage.setItem("chat_messages", JSON.stringify(messages));
-  }, [messages]);
-
-  useEffect(() => {
     localStorage.setItem("chat_resumes", JSON.stringify(resumes));
-  }, [resumes]);
-
-  useEffect(() => {
     localStorage.setItem("chat_suggestions", JSON.stringify(suggestions));
-  }, [suggestions]);
+  }, [messages, resumes, suggestions]);
 
   // Restauration de la session depuis le backend au montage
   useEffect(() => {
     const sid = localStorage.getItem("chat_session_id");
     if (!sid) return;
 
-    fetch(`${API_URL}/session/${sid}`)
+    fetch(`/session/${sid}`)
       .then((res) => {
         if (!res.ok) throw new Error("session not found");
         return res.json();
@@ -98,8 +91,8 @@ function ChatApp() {
         if (data.messages && data.messages.length > 0) {
           setMessages(data.messages);
           setSessionId(data.session_id);
-          if (data.summary) {
-            setResumes([data.summary]);
+          if (data.summaries && data.summaries.length > 0) {
+            setResumes(data.summaries);
           }
         }
       })
@@ -123,7 +116,7 @@ function ChatApp() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/chat`, {
+      const response = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId, query: texteAEnvoyer }),
@@ -156,11 +149,6 @@ function ChatApp() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const envoyerSuggestion = (texte) => {
-    if (loading) return;
-    envoyerQuestion(texte);
   };
 
   const nouvelleConversation = () => {
@@ -277,8 +265,8 @@ function ChatApp() {
           {loading && (
             <div className="flex items-end gap-2 justify-start">
               <div className="relative z-10 shrink-0 mb-1">
-                <Wobbi state="thinking" size={60} interactive={false} className="md:hidden" style={{ transform: 'translateX(-8px)' }} />
-                <Wobbi state="thinking" size={120} interactive={false} className="hidden md:block" style={{ transform: 'translateX(-12px)' }} />
+                <Wobbi state="thinking" size={60} interactive={true} className="md:hidden" style={{ transform: 'translateX(-8px)' }} />
+                <Wobbi state="thinking" size={120} interactive={true} className="hidden md:block" style={{ transform: 'translateX(-12px)' }} />
               </div>
 
               <div className="bg-card border border-border rounded-2xl px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-2 md:gap-3">
@@ -304,7 +292,7 @@ function ChatApp() {
             {suggestions.map((texte, index) => (
               <button
                 key={index}
-                onClick={() => envoyerSuggestion(texte)}
+                onClick={() => envoyerQuestion(texte)}
                 className="cursor-pointer rounded-full bg-accent text-on-accent text-xs md:text-sm font-medium px-2.5 py-1 md:px-3.5 md:py-1.5 hover:opacity-80 transition-opacity duration-200"
               >
                 {texte}
@@ -394,6 +382,11 @@ function ChatApp() {
                 Vous pouvez poser vos propres questions ou utiliser une suggestion.
               </p>
             </div>
+
+            <a href="/politique-confidentialite.html" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent border border-border hover:border-accent rounded-lg px-3 py-1.5 transition-colors duration-200">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Politique de confidentialité
+            </a>
 
             <button
               onClick={() => setShowWelcome(false)}

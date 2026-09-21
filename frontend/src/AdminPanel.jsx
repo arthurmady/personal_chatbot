@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 
-const API_URL = "";
-
 function parseUserAgent(ua) {
   if (!ua) return null;
   let browser = "unknown";
@@ -54,7 +52,7 @@ function LoginForm({ onLogin }) {
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch(`${API_URL}/admin/login`, {
+      const res = await fetch("/admin/login", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -101,7 +99,7 @@ function StatsTab() {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
-    authFetch(`${API_URL}/admin/stats`)
+    authFetch("/admin/stats")
       .then((r) => r.json())
       .then(setStats);
   }, []);
@@ -129,7 +127,7 @@ function SessionsTab() {
   const [selected, setSelected] = useState(null);
 
   const load = () => {
-    authFetch(`${API_URL}/admin/sessions`)
+    authFetch("/admin/sessions")
       .then((r) => r.json())
       .then(setSessions);
   };
@@ -137,14 +135,14 @@ function SessionsTab() {
   useEffect(load, []);
 
   const viewSession = (id) => {
-    authFetch(`${API_URL}/admin/sessions/${id}`)
+    authFetch(`/admin/sessions/${id}`)
       .then((r) => r.json())
       .then(setSelected);
   };
 
   const deleteSession = async (id) => {
     if (!confirm("Supprimer cette session ?")) return;
-    await authFetch(`${API_URL}/admin/sessions/${id}`, { method: "DELETE" });
+    await authFetch(`/admin/sessions/${id}`, { method: "DELETE" });
     setSelected(null);
     load();
   };
@@ -236,7 +234,7 @@ function DataTab() {
   const [uploading, setUploading] = useState(false);
 
   const load = () => {
-    authFetch(`${API_URL}/admin/data`)
+    authFetch("/admin/data")
       .then((r) => r.json())
       .then(setFiles);
   };
@@ -249,14 +247,14 @@ function DataTab() {
     setUploading(true);
     const form = new FormData();
     form.append("file", file);
-    await authFetch(`${API_URL}/admin/data`, { method: "POST", body: form });
+    await authFetch("/admin/data", { method: "POST", body: form });
     setUploading(false);
     load();
   };
 
   const deleteFile = async (name) => {
     if (!confirm(`Supprimer ${name} ?`)) return;
-    await authFetch(`${API_URL}/admin/data/${name}`, { method: "DELETE" });
+    await authFetch(`/admin/data/${name}`, { method: "DELETE" });
     load();
   };
 
@@ -311,7 +309,7 @@ function GitHubTab() {
     setLoading(true);
     setResult(null);
     try {
-      const res = await authFetch(`${API_URL}/admin/refresh-github`, { method: "POST" });
+      const res = await authFetch("/admin/refresh-github", { method: "POST" });
       const data = await res.json();
       setResult(data);
     } catch {
@@ -351,7 +349,7 @@ export default function AdminPanel() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    authFetch(`${API_URL}/admin/stats`)
+    authFetch("/admin/stats")
       .then((r) => {
         if (r.ok) setLoggedIn(true);
       })
@@ -359,7 +357,7 @@ export default function AdminPanel() {
   }, []);
 
   const logout = async () => {
-    await authFetch(`${API_URL}/admin/logout`, { method: "POST" });
+    await authFetch("/admin/logout", { method: "POST" });
     setLoggedIn(false);
   };
 
