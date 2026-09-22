@@ -1,8 +1,14 @@
+import logging
 import os
 import time
 import uuid
 from collections import defaultdict
 from pathlib import Path
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 from fastapi import FastAPI, Depends, Request, Cookie, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware

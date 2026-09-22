@@ -21,6 +21,26 @@ function renderSummary(text) {
   });
 }
 
+function mergeSummaries(entries) {
+  const byTag = new Map();
+  for (const text of entries) {
+    let tag = null;
+    for (const rawLine of String(text).split("\n")) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (line.startsWith("**") && line.endsWith("**") && line.indexOf("**", 2) === line.length - 2) {
+        tag = line.slice(2, -2);
+        if (!byTag.has(tag)) byTag.set(tag, new Set());
+        continue;
+      }
+      if (!tag) continue;
+      const kw = line;
+      if (kw) byTag.get(tag).add(kw);
+    }
+  }
+  return Array.from(byTag, ([tag, kws]) => `**${tag}**\n${Array.from(kws).join("\n")}`);
+}
+
 const SUGGESTIONS_PAR_DEFAUT = [
   "Qui est Arthur Mady ?",
   "Quel est son parcours professionnel ?",
@@ -354,7 +374,7 @@ function ChatApp() {
             <p className="text-sm text-muted">Aucun résumé pour l'instant.</p>
           ) : (
             <div className="space-y-3">
-              {resumes.map((point, index) => (
+              {mergeSummaries(resumes).map((point, index) => (
                 <div key={index} className="text-sm text-foreground leading-relaxed">
                   {renderSummary(point)}
                 </div>
