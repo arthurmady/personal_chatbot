@@ -39,8 +39,12 @@ def build_context(facts: list[dict], essentials_done: set[str] = None, details_d
 
         remaining_details = [d for d in details if d["id"] not in details_done]
         if remaining_details:
-            for d in remaining_details:
-                lines.append(f"[$id: {d['id']}] {d['content']}")
+            if fid in essentials_done:
+                for d in remaining_details:
+                    lines.append(f"[$id: {d['id']}] {d['content']}")
+            else:
+                for d in remaining_details:
+                    lines.append(f"[$id: {d['id']}] (contenu réservé : donner l'essentiel avant ce détail)")
 
         blocks.append("\n".join(lines))
 
