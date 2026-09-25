@@ -24,7 +24,7 @@ function parseUserAgent(ua) {
 }
 
 async function authFetch(url, options = {}) {
-  return fetch(url, { ...options, credentials: "include", headers: options.headers });
+  return fetch(url, { ...options, credentials: "include" });
 }
 
 function TabButton({ label, active, onClick }) {

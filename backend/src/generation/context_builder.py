@@ -9,6 +9,8 @@ def load_facts() -> list[dict]:
     all_facts = []
     data_dir = Path("data")
     for data_file in sorted(data_dir.glob("*.json")):
+        if data_file.name == "sessions.json":
+            continue
         raw = data_file.read_text(encoding="utf-8")
         data = json.loads(raw)
         all_facts.extend(data.get("facts", []))
@@ -35,7 +37,7 @@ def build_context(facts: list[dict], essentials_done: set[str] = None, details_d
             if plus:
                 lines.append(f"Plus : {plus}")
         else:
-            lines.append(f"(Already discussed — essential given)")
+            lines.append("(Already discussed — essential given)")
 
         remaining_details = [d for d in details if d["id"] not in details_done]
         if remaining_details:

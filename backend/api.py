@@ -64,41 +64,6 @@ MAX_CHAT_ATTEMPTS = 10
 CHAT_WINDOW = 60
 
 
-def _parse_user_agent(ua: str | None) -> dict:
-    if not ua:
-        return {"browser": "unknown", "os": "unknown", "device": "unknown", "raw": ""}
-
-    browser = "unknown"
-    if "Firefox/" in ua:
-        browser = "Firefox"
-    elif "Edg/" in ua:
-        browser = "Edge"
-    elif "Chrome/" in ua:
-        browser = "Chrome"
-    elif "Safari/" in ua and "Chrome" not in ua:
-        browser = "Safari"
-
-    os_name = "unknown"
-    if "Windows NT 10" in ua:
-        os_name = "Windows 10+"
-    elif "Windows" in ua:
-        os_name = "Windows"
-    elif "Mac OS X" in ua:
-        os_name = "macOS"
-    elif "Linux" in ua and "Android" not in ua:
-        os_name = "Linux"
-    elif "Android" in ua:
-        os_name = "Android"
-    elif "iPhone" in ua or "iPad" in ua:
-        os_name = "iOS"
-
-    device = "desktop"
-    if "Mobile" in ua or "Android" in ua or "iPhone" in ua or "iPad" in ua:
-        device = "mobile"
-
-    return {"browser": browser, "os": os_name, "device": device, "raw": ua}
-
-
 def _get_client_ip(request_obj: Request) -> str:
     return request_obj.client.host
 
@@ -145,7 +110,7 @@ async def chat(request: AskRequest, request_obj: Request):
     session_id = request.session_id or str(uuid.uuid4())
     is_new = session_id not in sessions
 
-    ua_info = _parse_user_agent(request_obj.headers.get("user-agent"))
+    user_agent = request_obj.headers.get("user-agent") or ""
 
     if is_new:
         stored = session_store.get_session(session_id)
@@ -156,19 +121,23 @@ async def chat(request: AskRequest, request_obj: Request):
             sessions[session_id] = conv
         else:
             sessions[session_id] = Conversation()
-            session_store.create_session(session_id, user_agent=ua_info["raw"])
+            session_store.create_session(session_id, user_agent=user_agent)
 
     conv = sessions[session_id]
 
     session_store.append_message(session_id, "user", request.query)
 
     result = await conv.ask(request.query)
-
-    session_store.append_message(session_id, "bot", result["response"], {
-        "suggestions": result["suggestions"],
-    })
     turn_summary = result.get("turn_summary", "")
-    session_store.append_summary(session_id, turn_summary, list(conv.essentials_done), list(conv.details_done))
+
+    session_store.record_response(
+        session_id,
+        result["response"],
+        {"suggestions": result["suggestions"]},
+        turn_summary,
+        list(conv.essentials_done),
+        list(conv.details_done),
+    )
 
     return {
         "response": result["response"],

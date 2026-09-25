@@ -31,17 +31,21 @@ def _save(sessions: dict):
         raise
 
 
+def _empty_session(user_agent: str = "") -> dict:
+    return {
+        "created_at": _now(),
+        "messages": [],
+        "summaries": [],
+        "essentials_done": [],
+        "details_done": [],
+        "user_agent": user_agent,
+    }
+
+
 def create_session(session_id: str, user_agent: str = ""):
     with _lock:
         sessions = load_sessions()
-        sessions[session_id] = {
-            "created_at": _now(),
-            "messages": [],
-            "summaries": [],
-            "essentials_done": [],
-            "details_done": [],
-            "user_agent": user_agent,
-        }
+        sessions[session_id] = _empty_session(user_agent)
         _save(sessions)
 
 
@@ -49,7 +53,7 @@ def append_message(session_id: str, role: str, content: str, response_meta: dict
     with _lock:
         sessions = load_sessions()
         if session_id not in sessions:
-            sessions[session_id] = {"created_at": _now(), "messages": [], "summaries": []}
+            sessions[session_id] = _empty_session()
         entry = {"role": role, "content": content, "timestamp": _now()}
         if response_meta:
             entry["meta"] = response_meta
@@ -57,17 +61,20 @@ def append_message(session_id: str, role: str, content: str, response_meta: dict
         _save(sessions)
 
 
-def append_summary(session_id: str, turn_summary: str, essentials_done: list[str] = None, details_done: list[str] = None):
+def record_response(session_id: str, content: str, response_meta: dict | None,
+                    turn_summary: str, essentials_done: list[str], details_done: list[str]):
     with _lock:
         sessions = load_sessions()
-        if session_id in sessions:
-            if turn_summary:
-                sessions[session_id].setdefault("summaries", []).append(turn_summary)
-            if essentials_done is not None:
-                sessions[session_id]["essentials_done"] = essentials_done
-            if details_done is not None:
-                sessions[session_id]["details_done"] = details_done
-            _save(sessions)
+        session = sessions.setdefault(session_id, _empty_session())
+        entry = {"role": "bot", "content": content, "timestamp": _now()}
+        if response_meta:
+            entry["meta"] = response_meta
+        session["messages"].append(entry)
+        if turn_summary:
+            session.setdefault("summaries", []).append(turn_summary)
+        session["essentials_done"] = essentials_done
+        session["details_done"] = details_done
+        _save(sessions)
 
 
 def delete_session(session_id: str) -> bool:

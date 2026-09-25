@@ -47,7 +47,6 @@ def _parse_readme(readme: str) -> tuple[str, list[dict]]:
     details = []
     current_heading = None
     current_content = []
-    heading_count = 0
 
     for line in lines:
         heading_match = re.match(r"^#{1,6}\s+(.+)$", line)
@@ -61,7 +60,6 @@ def _parse_readme(readme: str) -> tuple[str, list[dict]]:
                     })
             current_heading = heading_match.group(1).strip()
             current_content = []
-            heading_count += 1
         else:
             if current_heading is None:
                 stripped = line.strip()

@@ -82,10 +82,7 @@ function ChatApp() {
 
   // Timer longue attente
   useEffect(() => {
-    if (!loading) {
-      setLongWait(false);
-      return;
-    }
+    if (!loading) return;
     const timer = setTimeout(() => setLongWait(true), 13000);
     return () => clearTimeout(timer);
   }, [loading]);
@@ -134,6 +131,7 @@ function ChatApp() {
     setQuestion("");
     setSuggestions([]);
     setLoading(true);
+    setLongWait(false);
 
     try {
       const response = await fetch("/chat", {
@@ -270,7 +268,7 @@ function ChatApp() {
               >
                 {msg.role === "bot" ? (
                   <div className={`chat-bubble prose prose-base max-w-none ${darkMode ? "prose-invert" : ""}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({_node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>
                       {msg.content}
                     </ReactMarkdown>
                   </div>
