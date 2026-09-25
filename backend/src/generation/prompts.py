@@ -80,8 +80,9 @@ level : pour chaque fact_id, OBLIGATOIRE :
    - Si tu mentionnes le moindre détail d'un [$id] dans ta réponse, tu DOIS mettre ce $id dans la liste. Ne mens pas sur le level.
    - IMPORTANT : si tu cites des noms, pays, chiffres ou informations qui figurent dans un [$id], tu DOIS mettre ce $id dans la liste même si tu penses ne donner que l'essentiel.
 suggestions : GÉNÈRE EXACTEMENT 3 questions. Procédure (pour chaque question, dans l'ordre) :
+   0. SI remaining_topics = "(none)" ET AUCUN détail [$id] restant n'est visible dans le contexte (tout est déjà couvert) → "suggestions": []. Ne génère AUCUNE question.
    1. Choisit un angle NON encore répondu :
-      - Priorité : un détail [$id] disponible pour un fait essentiel donné dans ta réponse (au moins 1 question de ce type si un tel détail existe). Exemple : tu viens de parler de MBDA (essentiel) → "Quel était le sujet de son stage chez MBDA ?" si le détail [$id] contient l'info.
+      - Priorité : un détail [$id] encore non donné, pour un fait dont l'essentiel a déjà été mentionné (état "essential_given" ou "partial_details"), que ce soit dans cette réponse ou dans un échange précédent (au moins 1 question de ce type si un tel détail [$id] existe). Exemple : l'essentiel de MBDA a été donné → "Quel était le sujet de son stage chez MBDA ?" si le détail [$id] contient l'info.
       - Sinon : un tag dans remaining_topics. La question est formée À PARTIR DU NOM DU TAG UNIQUEMENT, sur le thème du tag en général. Jamais à partir d'un détail de ta réponse ou du contexte.
         - tag "Hobbies" → "Quels sont ses hobbies ?"
         - tag "Compétences techniques" → "Quelles sont ses compétences techniques ?"

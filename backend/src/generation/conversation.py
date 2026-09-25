@@ -286,6 +286,14 @@ class Conversation:
                     used.add(detail["id"])
         return used
 
+    def _has_open_subjects(self) -> bool:
+        for fact in self.facts:
+            if fact["id"] not in self.essentials_done:
+                return True
+            if any(d["id"] not in self.details_done for d in fact.get("details", [])):
+                return True
+        return False
+
     async def ask(self, query: str) -> dict:
         messages = self._build_messages(query)
 
@@ -355,6 +363,8 @@ class Conversation:
         turn_summary = summary if (has_new_essential and summary and non_divers) else ""
 
         suggestions = self._build_suggestions(llm_suggestions)
+        if not self._has_open_subjects():
+            suggestions = []
         self.last_topic = "; ".join(
             f["tags"][0] for f in self.facts
             if f["id"] in new_essential_ids and f.get("tags")
