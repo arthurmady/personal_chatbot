@@ -4,13 +4,54 @@ import remarkGfm from "remark-gfm";
 import AdminPanel from "./AdminPanel";
 import { Wobbi } from "../character";
 
+const TLDS = "com|fr|io|net|org|dev|ai|app|co|me|xyz|ly|gg";
+const BARE_URL_RE = new RegExp(
+  `(?<![\\w/@.-])((?:www\\.)?(?:[a-z0-9-]+\\.)+(?:${TLDS})(?::\\d{2,5})?(?:/[^\\s]*)?)`,
+  "gi"
+);
+
+function linkifyMarkdown(text) {
+  if (!text) return text;
+  const segments = text.split(/(\[[^\]\n]*\]\([^)\n]*\))/g);
+  return segments
+    .map((seg, i) => {
+      if (i % 2 === 1) return seg;
+      return seg.replace(BARE_URL_RE, (m, url) => {
+        const clean = url.replace(/[.,;:!?"'»]+$/, "");
+        const tail = url.slice(clean.length);
+        if (clean.includes("://")) return m;
+        return `[${clean}](https://${clean})${tail}`;
+      });
+    })
+    .join("");
+}
+
+function renderLinkified(text) {
+  const nodes = [];
+  let last = 0;
+  let m;
+  BARE_URL_RE.lastIndex = 0;
+  while ((m = BARE_URL_RE.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    const clean = m[1].replace(/[.,;:!?"'»]+$/, "");
+    nodes.push(
+      <a key={m.index} href={`https://${clean}`} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2 break-all">
+        {clean}
+      </a>
+    );
+    last = m.index + m[1].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
 function renderSummary(text) {
   return text.split("\n").map((line, i) => {
     const parts = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         return <strong key={j}>{part.slice(2, -2)}</strong>;
       }
-      return part;
+      return <span key={j}>{renderLinkified(part)}</span>;
     });
     return (
       <span key={i}>
@@ -268,8 +309,8 @@ function ChatApp() {
               >
                 {msg.role === "bot" ? (
                   <div className={`chat-bubble prose prose-base max-w-none ${darkMode ? "prose-invert" : ""}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({_node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>
-                      {msg.content}
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({_node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2 break-all" /> }}>
+                      {linkifyMarkdown(msg.content)}
                     </ReactMarkdown>
                   </div>
                 ) : (

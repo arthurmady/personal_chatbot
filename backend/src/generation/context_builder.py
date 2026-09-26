@@ -31,13 +31,9 @@ def build_context(facts: list[dict], essentials_done: set[str] = None, details_d
         plus = fact.get("plus")
 
         lines = [f"[id: {fid}] (tags: {tags_str})"]
-
-        if fid not in essentials_done:
-            lines.append(f"Essential : {fact['essential']}")
-            if plus:
-                lines.append(f"Plus : {plus}")
-        else:
-            lines.append("(Already discussed — essential given)")
+        lines.append(f"Essential : {fact['essential']}")
+        if plus:
+            lines.append(f"Plus : {plus}")
 
         remaining_details = [d for d in details if d["id"] not in details_done]
         if remaining_details:

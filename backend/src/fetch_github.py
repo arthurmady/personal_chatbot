@@ -1,11 +1,28 @@
 import base64
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 import httpx
 
 from config import GITHUB_USER_URL
+
+
+def _slugify(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^a-zA-Z0-9]+", "_", text).strip("_").lower()
+    return text or "section"
+
+
+def _make_detail_id(heading: str, used: set[str]) -> str:
+    base = _slugify(heading)
+    slug, n = base, 2
+    while slug in used:
+        slug = f"{base}_{n}"
+        n += 1
+    used.add(slug)
+    return slug
 
 
 def _extract_username(url: str) -> str:
@@ -46,7 +63,9 @@ def _parse_readme(readme: str) -> tuple[str, list[dict]]:
     pre_heading_lines = []
     details = []
     current_heading = None
+    current_id = None
     current_content = []
+    used_ids: set[str] = set()
 
     for line in lines:
         heading_match = re.match(r"^#{1,6}\s+(.+)$", line)
@@ -55,10 +74,11 @@ def _parse_readme(readme: str) -> tuple[str, list[dict]]:
                 content = "\n".join(current_content).strip()
                 if content:
                     details.append({
-                        "id": current_heading,
+                        "id": current_id,
                         "content": content
                     })
             current_heading = heading_match.group(1).strip()
+            current_id = _make_detail_id(current_heading, used_ids)
             current_content = []
         else:
             if current_heading is None:
@@ -72,7 +92,7 @@ def _parse_readme(readme: str) -> tuple[str, list[dict]]:
         content = "\n".join(current_content).strip()
         if content:
             details.append({
-                "id": current_heading,
+                "id": current_id,
                 "content": content
             })
 
@@ -105,7 +125,7 @@ def fetch_github_readmes(data_dir: str | Path = "data") -> dict:
 
         fact = {
             "id": name,
-            "tags": ["Projet Github"],
+            "tags": ["Projets"],
             "essential": essential,
             "details": details
         }
