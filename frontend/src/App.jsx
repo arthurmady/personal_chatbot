@@ -35,7 +35,7 @@ function renderLinkified(text) {
     if (m.index > last) nodes.push(text.slice(last, m.index));
     const clean = m[1].replace(/[.,;:!?"'»]+$/, "");
     nodes.push(
-      <a key={m.index} href={`https://${clean}`} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2 break-all">
+      <a key={m.index} href={`https://${clean}`} target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent underline underline-offset-2 break-all">
         {clean}
       </a>
     );
@@ -309,7 +309,7 @@ function ChatApp() {
               >
                 {msg.role === "bot" ? (
                   <div className={`chat-bubble prose prose-base max-w-none ${darkMode ? "prose-invert" : ""}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({_node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2 break-all" /> }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({_node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent underline underline-offset-2 break-all" /> }}>
                       {linkifyMarkdown(msg.content)}
                     </ReactMarkdown>
                   </div>
