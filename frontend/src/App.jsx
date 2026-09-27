@@ -4,13 +4,54 @@ import remarkGfm from "remark-gfm";
 import AdminPanel from "./AdminPanel";
 import { Wobbi } from "../character";
 
+const TLDS = "com|fr|io|net|org|dev|ai|app|co|me|xyz|ly|gg";
+const BARE_URL_RE = new RegExp(
+  `(?<![\\w/@.-])((?:www\\.)?(?:[a-z0-9-]+\\.)+(?:${TLDS})(?::\\d{2,5})?(?:/[^\\s]*)?)`,
+  "gi"
+);
+
+function linkifyMarkdown(text) {
+  if (!text) return text;
+  const segments = text.split(/(\[[^\]\n]*\]\([^)\n]*\))/g);
+  return segments
+    .map((seg, i) => {
+      if (i % 2 === 1) return seg;
+      return seg.replace(BARE_URL_RE, (m, url) => {
+        const clean = url.replace(/[.,;:!?"'»]+$/, "");
+        const tail = url.slice(clean.length);
+        if (clean.includes("://")) return m;
+        return `[${clean}](https://${clean})${tail}`;
+      });
+    })
+    .join("");
+}
+
+function renderLinkified(text) {
+  const nodes = [];
+  let last = 0;
+  let m;
+  BARE_URL_RE.lastIndex = 0;
+  while ((m = BARE_URL_RE.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    const clean = m[1].replace(/[.,;:!?"'»]+$/, "");
+    nodes.push(
+      <a key={m.index} href={`https://${clean}`} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2 break-all">
+        {clean}
+      </a>
+    );
+    last = m.index + m[1].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
 function renderSummary(text) {
   return text.split("\n").map((line, i) => {
     const parts = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         return <strong key={j}>{part.slice(2, -2)}</strong>;
       }
-      return part;
+      return <span key={j}>{renderLinkified(part)}</span>;
     });
     return (
       <span key={i}>
@@ -186,7 +227,7 @@ function ChatApp() {
   };
 
   return (
-    <div className="flex h-screen text-foreground" data-gaze-zone="">
+    <div className="flex h-dvh overflow-hidden text-foreground" data-gaze-zone="">
       {/* ---------- ZONE PRINCIPALE ---------- */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
@@ -241,7 +282,7 @@ function ChatApp() {
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 md:px-6 md:py-4 space-y-3 md:space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 md:px-6 md:py-4 space-y-3 md:space-y-4">
           {messages.length === 0 && (
             <p className="text-muted text-sm">Présentez-vous et entamez la discussion !</p>
           )}
@@ -268,8 +309,8 @@ function ChatApp() {
               >
                 {msg.role === "bot" ? (
                   <div className={`chat-bubble prose prose-base max-w-none ${darkMode ? "prose-invert" : ""}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({_node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>
-                      {msg.content}
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({_node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2 break-all" /> }}>
+                      {linkifyMarkdown(msg.content)}
                     </ReactMarkdown>
                   </div>
                 ) : (
@@ -306,7 +347,7 @@ function ChatApp() {
 
         {/* Suggestions de questions */}
         {suggestions.length > 0 && !loading && (
-          <div className="px-3 pb-2 md:px-6 flex flex-wrap gap-1.5 md:gap-2">
+          <div className="shrink-0 px-3 pb-2 md:px-6 flex flex-wrap gap-1.5 md:gap-2 max-h-24 overflow-y-auto">
             {suggestions.map((texte, index) => (
               <button
                 key={index}
@@ -320,7 +361,7 @@ function ChatApp() {
         )}
 
         {/* Zone de saisie */}
-        <div className="border-t border-border px-3 py-3 md:px-6 md:py-4">
+        <div className="shrink-0 border-t border-border px-3 py-3 md:px-6 md:py-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:pb-4">
           <div className="flex items-center gap-2 md:gap-3 rounded-xl border border-border bg-card px-3 py-2 md:px-4 md:py-2.5 focus-within:border-accent transition-colors duration-200">
             <input
               type="text"
