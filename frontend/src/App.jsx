@@ -227,7 +227,7 @@ function ChatApp() {
   };
 
   return (
-    <div className="flex h-screen text-foreground" data-gaze-zone="">
+    <div className="flex h-dvh overflow-hidden text-foreground" data-gaze-zone="">
       {/* ---------- ZONE PRINCIPALE ---------- */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
@@ -282,7 +282,7 @@ function ChatApp() {
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 md:px-6 md:py-4 space-y-3 md:space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 md:px-6 md:py-4 space-y-3 md:space-y-4">
           {messages.length === 0 && (
             <p className="text-muted text-sm">Présentez-vous et entamez la discussion !</p>
           )}
@@ -347,7 +347,7 @@ function ChatApp() {
 
         {/* Suggestions de questions */}
         {suggestions.length > 0 && !loading && (
-          <div className="px-3 pb-2 md:px-6 flex flex-wrap gap-1.5 md:gap-2">
+          <div className="shrink-0 px-3 pb-2 md:px-6 flex flex-wrap gap-1.5 md:gap-2 max-h-24 overflow-y-auto">
             {suggestions.map((texte, index) => (
               <button
                 key={index}
@@ -361,7 +361,7 @@ function ChatApp() {
         )}
 
         {/* Zone de saisie */}
-        <div className="border-t border-border px-3 py-3 md:px-6 md:py-4">
+        <div className="shrink-0 border-t border-border px-3 py-3 md:px-6 md:py-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:pb-4">
           <div className="flex items-center gap-2 md:gap-3 rounded-xl border border-border bg-card px-3 py-2 md:px-4 md:py-2.5 focus-within:border-accent transition-colors duration-200">
             <input
               type="text"
