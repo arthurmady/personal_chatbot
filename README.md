@@ -114,12 +114,12 @@ Chaque fichier `backend/data/*.json` (hors `sessions.json`) :
 {
   "facts": [
     {
-      "id": "exp_mbda",
+      "id": "exp_acme",
       "tags": ["Expériences"],
-      "essential": "Stage de fin d'études chez MBDA en 2026…",
+      "essential": "Stage en développement web chez Acme en 2024…",
       "plus": "Contexte complémentaire déjà public…",
       "details": [
-        { "id": "mbda_equipe", "content": "Contenu verrouillé tant que l'essentiel n'est pas donné…" }
+        { "id": "acme_equipe", "content": "Contenu verrouillé tant que l'essentiel n'est pas donné…" }
       ]
     }
   ]
