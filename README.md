@@ -1,6 +1,6 @@
 # MadyGPT
 
-Assistant personnel conversationnel qui présente une personne à la troisième personne, en remplaçant la fonction d'un CV : parcours, compétences et projets se découvrent en conversation plutôt qu'en lecture. Il répond uniquement à partir d'une base de faits en JSON, avec une divulgation progressive : l'essentiel d'abord, les détails seulement quand l'utilisateur les demande.
+Assistant personnel conversationnel qui présente une personne, en remplaçant la fonction d'un CV. Il répond uniquement à partir d'une base de faits en JSON, avec une divulgation progressive : l'essentiel d'abord, les détails seulement quand l'utilisateur les demande.
 
 ## Fonctionnalités
 
