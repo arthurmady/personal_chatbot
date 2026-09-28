@@ -1,6 +1,6 @@
 # MadyGPT
 
-Assistant personnel conversationnel qui présente **Arthur Mady** à la troisième personne. Il répond uniquement à partir d'une base de faits en JSON, avec une divulgation progressive : l'essentiel d'abord, les détails seulement quand l'utilisateur les demande.
+Assistant personnel conversationnel qui présente une personne, en remplaçant l'utilisation d'un CV. Il répond uniquement à partir d'une base de faits en JSON, avec une divulgation progressive : l'essentiel d'abord, les détails seulement quand l'utilisateur les demande.
 
 ## Fonctionnalités
 
