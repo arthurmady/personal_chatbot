@@ -24,19 +24,22 @@ _PARSE_FALLBACK = {
 
 _MAX_KEYWORD_WORDS = 10
 
-_STOPWORDS = frozenset("""
-le la les de des du un une et en a à au aux pour par sur dans avec que qui ne pas se sa son ses
-est sont plus mais aussi ou où d l s n c j m t qu on il elle ils elles nous vous tout tous très
-the and or if then else this that
-""".split()) | frozenset(chr(c) for c in range(ord("a"), ord("z") + 1))
+_LETTER_STOPWORDS = frozenset(chr(c) for c in range(ord("a"), ord("z") + 1))
 
-_SUGG_STOPWORDS = frozenset("""
-le la les de des du un une et en à au aux pour par sur dans avec que qui ne pas se sa son ses
-est sont plus mais aussi où quel quelle quels quelles qu ce cet cette ces combien comment quand
-pourquoi peut peux peuvent tu vous je on nous il elle ils elles lui leur tes tout tous toute
-toutes dont d s n m autres autre aussi chez pendant etait etaient etre avant apres lors selon
-entre depuis plusieurs meme certains certaines telles tels ainsi donc alors cependant toutefois
-""".split()) | frozenset(chr(c) for c in range(ord("a"), ord("z") + 1))
+_STOPWORDS = frozenset("""
+le la les de des du un une et en a au aux pour par sur dans avec que qui ne pas se sa son ses
+est sont plus mais aussi ou d l s n c j m t qu on il elle ils elles nous vous tout tous tres
+the and or if then else this that
+""".split()) | _LETTER_STOPWORDS
+
+_SUGG_EXTRA = frozenset("""
+quel quelle quels quelles ce cet cette ces combien comment quand pourquoi peut peux peuvent
+tu je lui leur tes toute toutes dont autres autre aussi chez pendant etait etaient etre avant
+apres lors selon entre depuis plusieurs meme certains certaines telles tels ainsi donc alors cependant
+toutefois
+""".split())
+
+_SUGG_STOPWORDS = _STOPWORDS | _SUGG_EXTRA
 
 _CUT_MARKERS = re.compile(
     r"\s+(?:codé|créé|développé|utilisé|réalisé|conçu|fait|appliqué|entraîné|construit|"
@@ -59,12 +62,12 @@ class Conversation:
         lines = []
         for fact in self.facts:
             fid = fact["id"]
-            e_done = fid in self.essentials_done
+            essential_done = fid in self.essentials_done
             details = fact.get("details", [])
             details_given = [d["id"] for d in details if d["id"] in self.details_done]
             details_remaining = [d["id"] for d in details if d["id"] not in self.details_done]
 
-            if not e_done:
+            if not essential_done:
                 status = "not_discussed"
             elif details and not details_given:
                 status = "essential_given"
@@ -110,7 +113,17 @@ class Conversation:
 
         return parsed
 
-    def _build_messages(self, query: str) -> list:
+    @staticmethod
+    def _target_display(target: dict | None) -> str:
+        if not target:
+            return "(aucune)"
+        fact_id = target.get("fact_id", "")
+        detail_id = target.get("detail_id", "")
+        if detail_id:
+            return f"[$id: {detail_id}]" + (f" du fait [id: {fact_id}]" if fact_id else "")
+        return f"[id: {fact_id}]"
+
+    def _build_messages(self, query: str, target: dict | None = None) -> list:
         context = build_context(self.facts, self.essentials_done, self.details_done)
         remaining_topics = self._remaining_topics()
         remaining_topics_display = "; ".join(remaining_topics) if remaining_topics else "(none)"
@@ -132,6 +145,7 @@ class Conversation:
             already_covered=covered_display,
             query=query,
             last_topic=self.last_topic,
+            suggestion_target=self._target_display(target),
         ))
         return [system_message, human_message]
 
@@ -157,16 +171,28 @@ class Conversation:
                         covered.append(tag)
         return "; ".join(covered) if covered else "(none)"
 
-    def _build_suggestions(self, llm_suggestions: list) -> list[str]:
+    def _build_suggestions(self, llm_suggestions: list) -> list[dict]:
         result = []
         seen = set()
         for s in llm_suggestions:
-            if not isinstance(s, str) or not s.strip():
+            if isinstance(s, str):
+                s = {"question": s}
+            if not isinstance(s, dict):
                 continue
-            if s in seen:
+            question = s.get("question")
+            if not isinstance(question, str) or not question.strip():
                 continue
-            seen.add(s)
-            result.append(s.strip())
+            question = question.strip()
+            if question in seen:
+                continue
+            seen.add(question)
+            fact_id = s.get("fact_id")
+            detail_id = s.get("detail_id")
+            result.append({
+                "question": question,
+                "fact_id": fact_id if isinstance(fact_id, str) else "",
+                "detail_id": detail_id if isinstance(detail_id, str) else "",
+            })
         return result[:3]
 
     def _scope_tags(self, fact_ids: list) -> set:
@@ -176,6 +202,32 @@ class Conversation:
             if fact["id"] in cited:
                 tags.update(t.strip().lower() for t in fact.get("tags", []))
         return tags
+
+    def _fact_by_id(self, fact_id: str) -> dict | None:
+        for fact in self.facts:
+            if fact["id"] == fact_id:
+                return fact
+        return None
+
+    def _fact_of_detail(self, detail_id: str) -> dict | None:
+        for fact in self.facts:
+            for d in fact.get("details", []):
+                if d["id"] == detail_id:
+                    return fact
+        return None
+
+    def resolve_suggestion_target(self, fact_id: str | None, detail_id: str | None) -> dict | None:
+        fact = None
+        resolved_detail = ""
+        if detail_id:
+            fact = self._fact_of_detail(detail_id)
+            if fact is not None:
+                resolved_detail = detail_id
+        if fact is None and fact_id:
+            fact = self._fact_by_id(fact_id)
+        if fact is None:
+            return None
+        return {"fact_id": fact["id"], "detail_id": resolved_detail}
 
     def _detail_suggestion_target(self, fact_ids: list, suggestions: list) -> tuple | None:
         scope = self._scope_tags(fact_ids)
@@ -193,8 +245,10 @@ class Conversation:
         if not open_pairs:
             return None
 
-        def is_detail_q(s: str) -> bool:
-            sw = {w for w in self._norm_words(s) if w not in _SUGG_STOPWORDS and len(w) > 2}
+        def is_detail_question(s: dict) -> bool:
+            if s["detail_id"]:
+                return any(s["detail_id"] == d["id"] for _fact, d in open_pairs)
+            sw = {w for w in self._norm_words(s["question"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
             if not sw:
                 return False
             for _fact, d in open_pairs:
@@ -206,14 +260,21 @@ class Conversation:
                     return True
             return False
 
-        if any(is_detail_q(s) for s in suggestions):
+        if any(is_detail_question(s) for s in suggestions):
             return None
         fact, detail = open_pairs[0]
         return fact, detail
 
-    def _detail_suggestion_out_of_scope(self, s: str, fact_ids: list) -> bool:
+    def _detail_suggestion_out_of_scope(self, s: dict, fact_ids: list) -> bool:
         scope = self._scope_tags(fact_ids)
-        sw = {w for w in self._norm_words(s) if w not in _SUGG_STOPWORDS and len(w) > 2}
+        fact = None
+        if s["detail_id"]:
+            fact = self._fact_of_detail(s["detail_id"])
+        if fact is None and s["fact_id"]:
+            fact = self._fact_by_id(s["fact_id"])
+        if fact is not None:
+            return not any(t.strip().lower() in scope for t in fact.get("tags", []))
+        sw = {w for w in self._norm_words(s["question"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
         if len(sw) < 2:
             return False
         matched_in = False
@@ -230,6 +291,48 @@ class Conversation:
                 else:
                     matched_out = True
         return matched_out and not matched_in
+
+    @classmethod
+    def _content_words(cls, text: str) -> set[str]:
+        out = set()
+        for w in cls._norm_words(text):
+            if w in _SUGG_STOPWORDS or len(w) <= 2:
+                continue
+            if len(w) > 4 and w.endswith("s"):
+                w = w[:-1]
+            out.add(w)
+        return out
+
+    def _suggestion_lacks_detail_support(self, s: dict) -> bool:
+        if not s["detail_id"]:
+            return False
+        fact = self._fact_of_detail(s["detail_id"])
+        if fact is None:
+            logger.info("suggestion dropped (unknown detail_id): %r", s)
+            return True
+        detail = next((d for d in fact.get("details", []) if d["id"] == s["detail_id"]), None)
+        if detail is None:
+            return True
+        qw = self._content_words(s["question"])
+        if not qw:
+            return False
+        known = (
+            self._content_words(fact.get("essential") or "")
+            | self._content_words(fact.get("plus") or "")
+            | {t for t in s["detail_id"].lower().split("_") if len(t) > 2}
+        )
+        for f in self.facts:
+            for d in f.get("details", []):
+                if d["id"] in self.details_done:
+                    known |= self._content_words(d["content"])
+        if not (qw & known):
+            logger.info("suggestion dropped (no anchor on known info): %r", s)
+            return True
+        spoiler = qw & (self._content_words(detail["content"]) - known)
+        if len(spoiler) >= 2:
+            logger.info("suggestion dropped (reveals detail): %r -> %s", s, sorted(spoiler))
+            return True
+        return False
 
     @classmethod
     def _short_subject(cls, raw: str) -> str:
@@ -453,8 +556,10 @@ class Conversation:
                     hit.add(d["id"])
         return hit
 
-    def _suggestion_targets_done(self, s: str) -> bool:
-        sw = {w for w in self._norm_words(s) if w not in _SUGG_STOPWORDS and len(w) > 2}
+    def _suggestion_targets_done(self, s: dict) -> bool:
+        if s["detail_id"]:
+            return s["detail_id"] in self.details_done
+        sw = {w for w in self._norm_words(s["question"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
         if len(sw) < 2:
             return False
         for fact in self.facts:
@@ -477,8 +582,10 @@ class Conversation:
                 return True
         return False
 
-    async def ask(self, query: str) -> dict:
-        messages = self._build_messages(query)
+    async def ask(self, query: str, target_fact_id: str | None = None,
+                  target_detail_id: str | None = None) -> dict:
+        target = self.resolve_suggestion_target(target_fact_id, target_detail_id)
+        messages = self._build_messages(query, target)
 
         start = time.perf_counter()
         response = await llm.ainvoke(messages)
@@ -540,14 +647,15 @@ class Conversation:
             for sub_id in level:
                 self.details_done.add(sub_id)
 
-        divers_ids = {f["id"] for f in self.facts if "Divers" in f.get("tags", [])}
-        non_divers = any(fid not in divers_ids for fid in new_essential_ids)
+        divers_fact_ids = {f["id"] for f in self.facts if "Divers" in f.get("tags", [])}
+        has_non_divers_fact = any(fid not in divers_fact_ids for fid in new_essential_ids)
 
-        turn_summary = summary if (has_new_essential and summary and non_divers) else ""
+        turn_summary = summary if (has_new_essential and summary and has_non_divers_fact) else ""
 
         suggestions = self._build_suggestions(llm_suggestions)
         suggestions = [s for s in suggestions if not self._suggestion_targets_done(s)]
         suggestions = [s for s in suggestions if not self._detail_suggestion_out_of_scope(s, fact_ids)]
+        suggestions = [s for s in suggestions if not self._suggestion_lacks_detail_support(s)]
         if not self._has_open_subjects():
             suggestions = []
         else:
@@ -555,7 +663,12 @@ class Conversation:
             if target:
                 question = await self._phrase_detail_question(*target)
                 if question:
-                    suggestions = ([question] + suggestions)[:3]
+                    backstop = {
+                        "question": question,
+                        "fact_id": target[0]["id"],
+                        "detail_id": target[1]["id"],
+                    }
+                    suggestions = ([backstop] + suggestions)[:3]
         self.last_topic = "; ".join(
             f["tags"][0] for f in self.facts
             if f["id"] in new_essential_ids and f.get("tags")
