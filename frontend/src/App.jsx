@@ -82,11 +82,14 @@ function mergeSummaries(entries) {
   return Array.from(byTag, ([tag, kws]) => `**${tag}**\n${Array.from(kws).join("\n")}`);
 }
 
-const SUGGESTIONS_PAR_DEFAUT = [
-  "Qui est Arthur Mady ?",
-  "Quel est son parcours professionnel ?",
-  "Que recherche-t-il comme poste ?",
+const DEFAULT_SUGGESTIONS = [
+  { question: "Qui est Arthur Mady ?", fact_id: "", detail_id: "" },
+  { question: "Quel est son parcours professionnel ?", fact_id: "", detail_id: "" },
+  { question: "Que recherche-t-il comme poste ?", fact_id: "", detail_id: "" },
 ];
+
+const normalizeSuggestion = (s) =>
+  typeof s === "string" ? { question: s, fact_id: "", detail_id: "" } : s;
 
 function ChatApp() {
   const [question, setQuestion] = useState("");
@@ -94,18 +97,18 @@ function ChatApp() {
     const saved = localStorage.getItem("chat_messages");
     return saved ? JSON.parse(saved) : [];
   });
-  const [resumes, setResumes] = useState(() => {
+  const [summaries, setSummaries] = useState(() => {
     const saved = localStorage.getItem("chat_resumes");
     return saved ? JSON.parse(saved) : [];
   });
   const [loading, setLoading] = useState(false);
   const [longWait, setLongWait] = useState(false);
-  const [afficherResume, setAfficherResume] = useState(true);
+  const [showSummary, setShowSummary] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [sessionId, setSessionId] = useState(() => localStorage.getItem("chat_session_id"));
   const [suggestions, setSuggestions] = useState(() => {
     const saved = localStorage.getItem("chat_suggestions");
-    return saved ? JSON.parse(saved) : SUGGESTIONS_PAR_DEFAUT;
+    return saved ? JSON.parse(saved).map(normalizeSuggestion) : DEFAULT_SUGGESTIONS;
   });
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem("chat_session_id"));
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -131,9 +134,9 @@ function ChatApp() {
   // Sauvegarde dans localStorage à chaque changement
   useEffect(() => {
     localStorage.setItem("chat_messages", JSON.stringify(messages));
-    localStorage.setItem("chat_resumes", JSON.stringify(resumes));
+    localStorage.setItem("chat_resumes", JSON.stringify(summaries));
     localStorage.setItem("chat_suggestions", JSON.stringify(suggestions));
-  }, [messages, resumes, suggestions]);
+  }, [messages, summaries, suggestions]);
 
   // Restauration de la session depuis le backend au montage
   useEffect(() => {
@@ -150,7 +153,7 @@ function ChatApp() {
           setMessages(data.messages);
           setSessionId(data.session_id);
           if (data.summaries && data.summaries.length > 0) {
-            setResumes(data.summaries);
+            setSummaries(data.summaries);
           }
         }
       })
@@ -163,12 +166,13 @@ function ChatApp() {
   }, []);
 
 
-  const envoyerQuestion = async (texteManuel) => {
-    const texteAEnvoyer = (texteManuel ?? question).trim();
-    if (!texteAEnvoyer || loading) return;
+  const sendQuestion = async (suggestion) => {
+    const picked = typeof suggestion === "object" && suggestion !== null;
+    const textToSend = (picked ? suggestion.question : (suggestion ?? question)).trim();
+    if (!textToSend || loading) return;
 
-    const nouveauMessageUser = { role: "user", content: texteAEnvoyer };
-    setMessages((prev) => [...prev, nouveauMessageUser]);
+    const userMessage = { role: "user", content: textToSend };
+    setMessages((prev) => [...prev, userMessage]);
     setQuestion("");
     setSuggestions([]);
     setLoading(true);
@@ -178,7 +182,12 @@ function ChatApp() {
       const response = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, query: texteAEnvoyer }),
+        body: JSON.stringify({
+          session_id: sessionId,
+          query: textToSend,
+          target_fact_id: picked && suggestion.fact_id ? suggestion.fact_id : null,
+          target_detail_id: picked && suggestion.detail_id ? suggestion.detail_id : null,
+        }),
       });
 
       if (!response.ok) {
@@ -195,10 +204,10 @@ function ChatApp() {
       setMessages((prev) => [...prev, { role: "bot", content: data.response }]);
 
       if (data.summary) {
-        setResumes((prev) => [...prev, data.summary]);
+        setSummaries((prev) => [...prev, data.summary]);
       }
 
-      setSuggestions(data.suggestions || []);
+      setSuggestions((data.suggestions || []).map(normalizeSuggestion));
     } catch (error) {
       console.error("Erreur lors de l'appel à l'API :", error);
       setMessages((prev) => [
@@ -210,20 +219,20 @@ function ChatApp() {
     }
   };
 
-  const nouvelleConversation = () => {
+  const newConversation = () => {
     localStorage.removeItem("chat_session_id");
     localStorage.removeItem("chat_messages");
     localStorage.removeItem("chat_resumes");
     localStorage.removeItem("chat_suggestions");
     setSessionId(null);
     setMessages([]);
-    setResumes([]);
-    setSuggestions(SUGGESTIONS_PAR_DEFAUT);
+    setSummaries([]);
+    setSuggestions(DEFAULT_SUGGESTIONS);
     setShowWelcome(true);
   };
 
-  const gererTouche = (e) => {
-    if (e.key === "Enter" && !loading) envoyerQuestion();
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !loading) sendQuestion();
   };
 
   return (
@@ -239,7 +248,7 @@ function ChatApp() {
 
           <div className="flex items-center gap-1.5 md:gap-3">
             <button
-              onClick={nouvelleConversation}
+              onClick={newConversation}
               className="cursor-pointer rounded-lg border border-border px-2 py-1.5 md:px-3 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200"
               title="Nouvelle conversation"
             >
@@ -264,11 +273,11 @@ function ChatApp() {
             </a>
 
             <button
-              onClick={() => setAfficherResume(!afficherResume)}
+              onClick={() => setShowSummary(!showSummary)}
               className="cursor-pointer rounded-lg border border-border px-2 py-1.5 md:px-3 text-sm text-muted hover:text-foreground hover:border-accent transition-colors duration-200 hidden md:block"
-              title={afficherResume ? "Masquer résumé" : "Afficher résumé"}
+              title={showSummary ? "Masquer résumé" : "Afficher résumé"}
             >
-              {afficherResume ? "Masquer résumé" : "Afficher résumé"}
+              {showSummary ? "Masquer résumé" : "Afficher résumé"}
             </button>
 
             <button
@@ -348,13 +357,13 @@ function ChatApp() {
         {/* Suggestions de questions */}
         {suggestions.length > 0 && !loading && (
           <div className="shrink-0 px-3 pb-2 md:px-6 flex flex-wrap gap-1.5 md:gap-2 max-h-24 overflow-y-auto">
-            {suggestions.map((texte, index) => (
+            {suggestions.map((s, index) => (
               <button
                 key={index}
-                onClick={() => envoyerQuestion(texte)}
+                onClick={() => sendQuestion(s)}
                 className="cursor-pointer rounded-full bg-accent text-on-accent text-xs md:text-sm font-medium px-2.5 py-1 md:px-3.5 md:py-1.5 hover:opacity-80 transition-opacity duration-200"
               >
-                {texte}
+                {s.question}
               </button>
             ))}
           </div>
@@ -367,13 +376,13 @@ function ChatApp() {
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={gererTouche}
+              onKeyDown={handleKeyDown}
               placeholder="Posez votre question..."
               disabled={loading}
               className="flex-1 bg-transparent outline-none text-sm placeholder:text-foreground/50 disabled:opacity-50"
             />
             <button
-              onClick={() => envoyerQuestion()}
+              onClick={() => sendQuestion()}
               disabled={loading || !question.trim()}
               className="cursor-pointer rounded-lg bg-accent text-on-accent px-3 py-1.5 md:px-4 text-sm font-medium hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -392,7 +401,7 @@ function ChatApp() {
         />
       )}
 
-      {afficherResume && (
+      {showSummary && (
         <aside className={`
           fixed inset-y-0 right-0 z-50 w-72 shrink-0 border-l border-border bg-card px-4 py-4 overflow-y-auto transition-transform duration-300
           md:static md:translate-x-0
@@ -409,11 +418,11 @@ function ChatApp() {
               ✕
             </button>
           </div>
-          {resumes.length === 0 ? (
+          {summaries.length === 0 ? (
             <p className="text-sm text-muted">Aucun résumé pour l'instant.</p>
           ) : (
             <div className="space-y-3">
-              {mergeSummaries(resumes).map((point, index) => (
+              {mergeSummaries(summaries).map((point, index) => (
                 <div key={index} className="text-sm text-foreground leading-relaxed">
                   {renderSummary(point)}
                 </div>

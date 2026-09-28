@@ -38,6 +38,8 @@ sessions: dict[str, Conversation] = {}
 class AskRequest(BaseModel):
     session_id: str | None = None
     query: str
+    target_fact_id: str | None = None
+    target_detail_id: str | None = None
 
     def model_post_init(self, __context):
         if len(self.query) > 2000:
@@ -47,7 +49,7 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     session_id: str
     response: str
-    suggestions: list[str]
+    suggestions: list[dict]
     summary: str
 
 
@@ -68,21 +70,12 @@ def _get_client_ip(request_obj: Request) -> str:
     return request_obj.client.host
 
 
-def _check_rate_limit(ip: str) -> bool:
+def _check_rate_limit(store: dict[str, list[float]], ip: str, window: int, max_attempts: int) -> bool:
     now = time.time()
-    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < LOGIN_WINDOW]
-    if len(_login_attempts[ip]) >= MAX_LOGIN_ATTEMPTS:
+    store[ip] = [t for t in store[ip] if now - t < window]
+    if len(store[ip]) >= max_attempts:
         return False
-    _login_attempts[ip].append(now)
-    return True
-
-
-def _check_chat_rate_limit(ip: str) -> bool:
-    now = time.time()
-    _chat_attempts[ip] = [t for t in _chat_attempts[ip] if now - t < CHAT_WINDOW]
-    if len(_chat_attempts[ip]) >= MAX_CHAT_ATTEMPTS:
-        return False
-    _chat_attempts[ip].append(now)
+    store[ip].append(now)
     return True
 
 
@@ -105,7 +98,7 @@ async def get_session(session_id: str):
 @app.post("/chat", response_model=AskResponse)
 async def chat(request: AskRequest, request_obj: Request):
     ip = _get_client_ip(request_obj)
-    if not _check_chat_rate_limit(ip):
+    if not _check_rate_limit(_chat_attempts, ip, CHAT_WINDOW, MAX_CHAT_ATTEMPTS):
         return Response(status_code=429, content="trop de messages, réessayez plus tard")
     session_id = request.session_id or str(uuid.uuid4())
     is_new = session_id not in sessions
@@ -127,7 +120,7 @@ async def chat(request: AskRequest, request_obj: Request):
 
     session_store.append_message(session_id, "user", request.query)
 
-    result = await conv.ask(request.query)
+    result = await conv.ask(request.query, request.target_fact_id, request.target_detail_id)
     turn_summary = result.get("turn_summary", "")
 
     session_store.record_response(
@@ -152,7 +145,7 @@ async def chat(request: AskRequest, request_obj: Request):
 @app.post("/admin/login")
 async def admin_login(request: LoginRequest, response: Response, request_obj: Request):
     ip = _get_client_ip(request_obj)
-    if not _check_rate_limit(ip):
+    if not _check_rate_limit(_login_attempts, ip, LOGIN_WINDOW, MAX_LOGIN_ATTEMPTS):
         return Response(status_code=429, content="too many attempts, try later")
     token = login(request.password)
     if not token:
