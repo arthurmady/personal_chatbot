@@ -62,7 +62,8 @@ def append_message(session_id: str, role: str, content: str, response_meta: dict
 
 
 def record_response(session_id: str, content: str, response_meta: dict | None,
-                    turn_summary: str, essentials_done: list[str], details_done: list[str]):
+                    turn_summary: str, essentials_done: list[str], details_done: list[str],
+                    summary_ids: list[str] | None = None):
     with _lock:
         sessions = load_sessions()
         session = sessions.setdefault(session_id, _empty_session())
@@ -74,6 +75,8 @@ def record_response(session_id: str, content: str, response_meta: dict | None,
             session.setdefault("summaries", []).append(turn_summary)
         session["essentials_done"] = essentials_done
         session["details_done"] = details_done
+        if summary_ids is not None:
+            session["summary_ids"] = summary_ids
         _save(sessions)
 
 

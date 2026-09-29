@@ -57,16 +57,21 @@ FORMAT "response" (uniquement) :
 JSON DE SORTIE (strict, sans texte autour) :
 {{
   "response": "réponse en Markdown",
-  "fact_ids": ["id_du_fait_1"],
-  "level": {{"id_du_fait_1": ["sub_id_1"], "id_du_fait_2": []}}
+  "used_fact_ids": ["id_du_fait_1"],
+  "used_detail_ids": ["sub_id_1"]
 }}
 
-fact_ids : liste des [id] des facts utilisés dans ta réponse. Recopie EXACTEMENT l'id. Cette identification repose UNIQUEMENT sur la correspondance de SENS entre la question et le contenu du CONTEXTE (Essentiel/Plus/détails) — que la question soit tapée librement par l'utilisateur avec ses propres mots, ou qu'elle reprenne mot pour mot une suggestion proposée précédemment, ne change RIEN à l'attribution : les deux cas doivent être traités exactement de la même façon.
-level : pour chaque fact_id, OBLIGATOIRE :
+used_fact_ids : liste des [id] des facts utilisés dans ta réponse. Recopie EXACTEMENT l'id.
+   - N'inclus un id QUE si tu as utilisé l'ÉLÉMENT ENTIER de ce fait : tout son Essentiel (avec le « Plus » s'il existe) ou le contenu COMPLET d'un de ses détails [$id].
+   - Utilisation partielle (un bout de l'essentiel), simple mention, ou aucun élément utilisé → cet id est ABSENT de la liste. Si aucun élément n'est utilisé entier, la liste est [].
+   - Cette identification repose UNIQUEMENT sur la correspondance de SENS entre la question et le contenu du CONTEXTE (Essentiel/Plus/détails) — que la question soit tapée librement par l'utilisateur avec ses propres mots, ou qu'elle reprenne mot pour mot une suggestion proposée précédemment, ne change RIEN à l'attribution : les deux cas doivent être traités exactement de la même façon.
+
+used_detail_ids : liste PLATE des $id des détails [$id] dont tu as donné le contenu COMPLET dans "response" :
    - TOUJOURS un TABLEAU JSON, JAMAIS une chaîne.
-   - [] si ta réponse ne contient AUCUN contenu des détails [$id] (essentiel seul).
-   - ["sub_id_1", "sub_id_2"] si ta réponse contient du contenu issu de détails [$id]. Liste EXACTEMENT les $id utilisés.
-   - Tout contenu [$id] utilisé → son $id dans le tableau, y compris noms, pays, chiffres ou entreprises, même si tu penses ne donner que l'essentiel. Ne laisse JAMAIS le tableau vide si ta réponse cite un [$id]. Ne mens pas sur le level.
+   - [] si ta réponse ne contient AUCUN contenu de détail (essentiel seul).
+   - ["sub_id_1", "sub_id_2"] si ta réponse contient du contenu de détails. Liste EXACTEMENT les $id utilisés.
+   - Tout contenu [$id] utilisé → son $id dans la liste, y compris noms, pays, chiffres ou entreprises, même si tu penses ne donner que l'essentiel. Ne laisse JAMAIS la liste vide si ta réponse cite un [$id].
+   - Chaque $id listé doit appartenir à un fait lui-même listé dans "used_fact_ids".
 """
 
 FOLLOWUP_TEMPLATE = """Sujets déjà abordés : {already_covered}
@@ -74,7 +79,7 @@ Sujet de la réponse précédente : {last_topic}
 Cible déclarée de la question (suggestion cliquée) : {suggestion_target}
 
 Quand la cible n'est pas "(aucune)", la question porte EXACTEMENT sur cet identifiant :
-- cible = [tag: X] → le sujet complet X : donne les essentiels de TOUS les faits dont les tags (ligne "(tags: ...)" du contexte) contiennent X, y compris ceux déjà cités, un essentiel par phrase, sans détail [$id] (règle 5). Liste TOUS ces [id] dans "fact_ids" et mets "level" à [] pour chacun.
+- cible = [tag: X] → le sujet complet X : donne les essentiels de TOUS les faits dont les tags (ligne "(tags: ...)" du contexte) contiennent X, y compris ceux déjà cités, un essentiel par phrase, sans détail [$id] (règle 5). Liste TOUS ces [id] dans "used_fact_ids" et "used_detail_ids" reste [].
 - cible = [$id] VISIBLE dans le contexte, état "essential_given" ou "partial_details" → ta réponse DOIT être le contenu COMPLET de ce détail (règle 7). INTERDIT ABSOLU d'appliquer la règle 2 ici : jamais de phrase "ne m'a pas donné cette information" ni aucun équivalent "information manquante" pour un [$id] visible — le contenu est dans le contexte, donne-le.
 - cible = [$id] en "not_discussed" → essentiel + "Plus" UNIQUEMENT (règle 7).
 - cible = [id] seul → essentiel du fait (règle 7).

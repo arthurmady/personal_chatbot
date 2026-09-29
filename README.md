@@ -7,8 +7,8 @@ Assistant personnel conversationnel qui présente une personne, en remplaçant l
 - **Chat IA contextuel** — réponses strictement limitées aux faits du contexte (jamais de connaissances inventées), en français, format Markdown.
 - **États de faits** — chaque fait suit un état (`not_discussed` → `essential_given` → `partial_details` → `details_complete`) : les détails `[id]` restent verrouillés tant que l'essentiel n'a pas été donné.
 - **Suggestions anti-spoil** — les questions de suggestion portent un `fact_id` / `detail_id` déclaré : elles restent volontairement vagues pour ne rien révéler du détail non donné, et au clic la cible exacte est transmise au modèle.
-- **Résumé latéral** — résumé par tag (idées de l'essentiel uniquement), fusionné côté client à chaque tour.
-- **Persistance des sessions** — historique, résumés et états de faits sauvegardés en JSON sur disque (écriture atomique, verrouillage thread).
+- **Résumé latéral** — résumé par tag (idées de l'essentiel uniquement), écrit par delta à chaque tour puis fusionné côté client ; les mots réservés (plus/détails) sont retirés des mots-clés à l'affichage au lieu de supprimer la ligne entière.
+- **Persistance des sessions** — historique, résumés, ids de résumé déjà écrits et états de faits sauvegardés en JSON sur disque (écriture atomique, verrouillage thread).
 - **Import GitHub** — régénère des faits "Projets" à partir des README de vos dépôts.
 - **Panneau d'admin** — stats, sessions, visualisation des fichiers de données (vue faits + JSON brut), upload/suppression, génération IA des suggestions et résumés, refresh GitHub (`/admin`).
 - **Personnage animé** — avatar SVG interactif (Wobbi) réactif aux états du chat (idle, thinking, sleeping…).
@@ -59,8 +59,8 @@ deploy/                   # setup.sh (serveur) + deploy.sh (mise à jour)
 ### Flux d'une requête (`POST /chat`)
 
 1. `context_builder` assemble le contexte : essentiels toujours visibles, détails `[id]` affichés en clair seulement si le fait est `essential_given`, sinon verrouillés (`contenu réservé`).
-2. **Un seul appel LLM** répond en JSON strict : `response`, `fact_ids`, `level`.
-3. `conversation.py` détecte les détails réellement utilisés (n-grammes + overlap), met à jour les états, puis lit dans `data/derived/` les suggestions et le résumé — sans appel LLM supplémentaire. Les suggestions sont de 2 formes : une question par tag restant à couvrir (cible `[tag: X]`, réponse = tous les essentiels du tag) ou une question de détail pour un fait déjà donné (filtrée : déjà donnée, anti-spoil).
+2. **Un seul appel LLM** répond en JSON strict : `response`, `used_fact_ids`, `used_detail_ids`.
+3. `conversation.py` cumule `used_detail_ids` (LLM) + détection automatique (n-grammes + overlap), met à jour les états, puis lit dans `data/derived/` les suggestions et le résumé — sans appel LLM supplémentaire. Suggestions strictes : **3 max**, **au plus 2 de détail**, **toujours ≥1 question de tag** tant qu'il reste un tag non mentionné (un tag n'est couvert que si tous ses essentiels sont donnés) ; détails avant tags ; zéro spoil (déjà donnée, contenu réservé). Sans tag restant, jusqu'à 3 questions de détail. Une question de tag cible `[tag: X]` : la réponse donne tous les essentiels du tag. Résumé écrit **par delta** : seuls les faits dont l'id figure dans `used_fact_ids` ET n'est pas encore dans `summary_ids` ajoutent leurs `summary_keywords` sous la section de leur tag ; réponse sans id neuf → `turn_summary` vide. Un id ne rejoint `summary_ids` que si au moins un de ses mots-clés a réellement été écrit (mot-clé vide ou entièrement retiré par l'anti-spoil → retenté à la prochaine mention) ; les mots réservés (présents dans le `plus` ou les détails mais dans aucun essentiel) sont retirés mot à mot des `summary_keywords` (`_sanitize_keyword`), la ligne est gardée tant qu'il reste au moins 2 mots ; à la restauration d'une session, `prune_summary_ids` écarte les ids dont aucun mot-clé assaini n'apparaît dans le résumé stocké.
 
 ## Installation
 
@@ -165,7 +165,7 @@ Générées à l'upload par `precompute.py`, une entrée par fichier source :
 ```
 
 - **`tags`** — 1 question de suggestion par tag. Cliquée, elle cible `[tag: X]` : la réponse donne les essentiels de TOUS les faits de ce tag (tous passent en `done`), et le résumé s'affiche.
-- **`summary_keywords`** — idées extraites de l'essentiel, regroupées par tag au moment du chat.
+- **`summary_keywords`** — idées extraites de l'essentiel, écrites par delta sous la section du tag (faits déjà référencés dans `summary_ids` ignorés).
 - **`details`** — 1 question vague (zéro spoil) par détail, utilisée tant que le détail n'est pas donné.
 
 ### Import des projets GitHub

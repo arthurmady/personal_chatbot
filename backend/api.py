@@ -121,6 +121,8 @@ async def chat(request: AskRequest, request_obj: Request):
             conv = Conversation()
             conv.essentials_done = set(stored.get("essentials_done", []))
             conv.details_done = set(stored.get("details_done", []))
+            conv.summary_ids = list(stored.get("summary_ids", []))
+            conv.prune_summary_ids(stored.get("summaries", []))
             sessions[session_id] = conv
         else:
             sessions[session_id] = Conversation()
@@ -145,6 +147,7 @@ async def chat(request: AskRequest, request_obj: Request):
         turn_summary,
         list(conv.essentials_done),
         list(conv.details_done),
+        list(conv.summary_ids),
     )
 
     return {

@@ -15,9 +15,12 @@ logger = logging.getLogger(__name__)
 
 _PARSE_FALLBACK = {
     "response": "",
-    "fact_ids": [],
-    "level": {},
+    "used_fact_ids": [],
+    "used_detail_ids": [],
 }
+
+_MAX_SUGGESTIONS = 3
+_MAX_DETAIL_SUGGESTIONS = 2
 
 _LETTER_STOPWORDS = frozenset(chr(c) for c in range(ord("a"), ord("z") + 1))
 
@@ -46,6 +49,7 @@ class Conversation:
         self.all_tags = extract_topics(self.facts)
         self.essentials_done: set[str] = set()
         self.details_done: set[str] = set()
+        self.summary_ids: list[str] = []
         self.last_topic: str = ""
 
     def _get_fact_states(self) -> str:
@@ -93,10 +97,10 @@ class Conversation:
             return {**_PARSE_FALLBACK, "response": raw_content}
 
         parsed.setdefault("response", raw_content)
-        if not isinstance(parsed.get("fact_ids"), list):
-            parsed["fact_ids"] = []
-        if not isinstance(parsed.get("level"), dict):
-            parsed["level"] = {}
+        if not isinstance(parsed.get("used_fact_ids"), list):
+            parsed["used_fact_ids"] = []
+        if not isinstance(parsed.get("used_detail_ids"), list):
+            parsed["used_detail_ids"] = []
 
         return parsed
 
@@ -190,54 +194,62 @@ class Conversation:
             "tag": tag,
         }
 
-    def _suggestion_groups(self, fact_ids: list) -> list[list[dict]]:
+    def _detail_suggestion_groups(self, fact_ids: list) -> list[list[dict]]:
         cited = {fid for fid in fact_ids if isinstance(fid, str)}
         ordered = sorted(self.facts, key=lambda f: 0 if f["id"] in cited else 1)
-        detail_groups: list[list[dict]] = []
+        groups: list[list[dict]] = []
         for fact in ordered:
             if fact["id"] not in self.essentials_done:
                 continue
             group = self._derived_detail_questions(fact)
             if group:
-                detail_groups.append(group)
-
-        remaining = self._remaining_topics()
-        tag_groups = [[self._derived_tag_question(tag)] for tag in remaining]
-
-        groups: list[list[dict]] = []
-        for i in range(max(len(detail_groups), len(tag_groups))):
-            if i < len(detail_groups):
-                groups.append(detail_groups[i])
-            if i < len(tag_groups):
-                groups.append(tag_groups[i])
+                groups.append(group)
         return groups
 
-    def _precomputed_suggestions(self, fact_ids: list) -> list[dict]:
-        if not self._has_open_subjects():
-            return []
-        groups = self._suggestion_groups(fact_ids)
+    def _tag_suggestion_groups(self) -> list[list[dict]]:
+        return [[self._derived_tag_question(tag)] for tag in self._remaining_topics()]
+
+    def _pick_from_groups(
+        self, groups: list[list[dict]], limit: int, used: set[str]
+    ) -> list[dict]:
         picked: list[dict] = []
-        seen: set[str] = set()
         depth = 0
-        while len(picked) < 3:
+        while len(picked) < limit:
             reachable = False
             for group in groups:
                 if depth >= len(group):
                     continue
                 reachable = True
                 s = group[depth]
-                if s["question"] in seen:
+                if s["question"] in used:
                     continue
                 if self._suggestion_targets_done(s) or self._suggestion_reveals_detail(s):
                     continue
-                seen.add(s["question"])
+                used.add(s["question"])
                 picked.append(s)
-                if len(picked) >= 3:
+                if len(picked) >= limit:
                     break
             if not reachable:
                 break
             depth += 1
         return picked
+
+    def _precomputed_suggestions(self, fact_ids: list) -> list[dict]:
+        """3 questions max : au plus 2 de détail, toujours ≥1 tag restant si existe."""
+        if not self._has_open_subjects():
+            return []
+        detail_groups = self._detail_suggestion_groups(fact_ids)
+        tag_groups = self._tag_suggestion_groups()
+        used: set[str] = set()
+        if tag_groups:
+            details = self._pick_from_groups(
+                detail_groups, _MAX_DETAIL_SUGGESTIONS, used
+            )
+            tags = self._pick_from_groups(
+                tag_groups, _MAX_SUGGESTIONS - len(details), used
+            )
+            return details + tags
+        return self._pick_from_groups(detail_groups, _MAX_SUGGESTIONS, used)
 
     def _fact_by_id(self, fact_id: str) -> dict | None:
         for fact in self.facts:
@@ -319,6 +331,37 @@ class Conversation:
             blocks.append(f"**{entry['tag']}**\n" + "\n".join(lines))
         return "\n\n".join(blocks)
 
+    def prune_summary_ids(self, summaries: list[str]) -> None:
+        """Ne conserve que les ids dont les mots-clés figurent déjà dans le résumé.
+
+        Répare les sessions enregistrées avant que `summary_ids` ne reflète que
+        les ids réellement écrits : un id dont aucun mot-clé n'apparaît pas est
+        retiré et sera retenté à la prochaine mention.
+        """
+        text = "\n".join(summaries)
+        kept: list[str] = []
+        for fid in self.summary_ids:
+            fact = self._fact_by_id(fid)
+            entry = self.derived.get(fid, {})
+            keywords = [k for k in entry.get("summary_keywords", []) if isinstance(k, str) and k]
+            if not keywords:
+                continue
+            tags = (fact or {}).get("tags") or [""]
+            written_all = True
+            for kw in keywords:
+                if not any(
+                    (clean := self._sanitize_keyword(kw, tag)) and clean in text
+                    for tag in tags
+                ):
+                    written_all = False
+                    break
+            if written_all:
+                kept.append(fid)
+        dropped = set(self.summary_ids) - set(kept)
+        if dropped:
+            logger.info("summary_ids pruned (never written): %s", sorted(dropped))
+        self.summary_ids = kept
+
     def _summary_suspicious_tokens(self) -> set[str]:
         if getattr(self, "_summary_guard_cache", None) is not None:
             return self._summary_guard_cache
@@ -334,44 +377,63 @@ class Conversation:
         self._summary_guard_cache = (restricted_tokens - essential_tokens) - _STOPWORDS
         return self._summary_guard_cache
 
-    def _filter_non_essential_keywords(self, entries: list[dict]) -> list[dict]:
-        suspicious = self._summary_suspicious_tokens()
-        kept: list[dict] = []
-        for entry in entries:
-            tag_tokens = set(self._norm_words(entry["tag"]))
-            keywords: list[str] = []
-            for kw in entry["keywords"]:
-                bad = sorted({w for w in self._norm_words(kw) if w in suspicious and w not in tag_tokens})
-                if bad:
-                    logger.info("summary keyword dropped (non-essential): %r -> %s", kw, bad)
-                    continue
-                keywords.append(kw)
-            if keywords:
-                kept.append({"tag": entry["tag"], "keywords": keywords})
-            else:
-                logger.info("summary tag dropped (all keywords non-essential): %r", entry["tag"])
-        return kept
+    def _sanitize_keyword(self, kw: str, tag: str) -> str | None:
+        """Retire les mots réservés (plus/détails) d'un mot-clé au lieu de le supprimer.
 
-    def _precomputed_summary(self) -> str:
+        Renvoie le mot-clé nettoyé, ou None s'il ne reste plus assez de mots.
+        """
+        suspicious = self._summary_suspicious_tokens()
+        tag_tokens = set(self._norm_words(tag))
+        kept_parts: list[str] = []
+        for part in re.split(r"\s+", kw.strip()):
+            if not part:
+                continue
+            if any(w in suspicious and w not in tag_tokens for w in self._norm_words(part)):
+                logger.info("summary keyword word removed (non-essential): %r -> %r", kw, part)
+                continue
+            kept_parts.append(part)
+        out = re.sub(r"[\s:;,–\-]+$", "", " ".join(kept_parts)).strip()
+        content = [w for w in self._norm_words(out) if w not in tag_tokens]
+        if len(content) < 2:
+            logger.info("summary keyword dropped (non-essential): %r -> %r", kw, out)
+            return None
+        return out
+
+    def _summary_delta(self, new_ids: list[str]) -> tuple[str, list[str]]:
+        """Mots-clés des faits neufs, groupés par tag (titre du tag inclus).
+
+        Retourne (markdown, ids réellement écrits) : un fait n'entre dans
+        `summary_ids` que si au moins un de ses mots-clés a été écrit, sinon
+        il sera retenté à la prochaine mention.
+        """
         by_tag: dict[str, list[str]] = {}
-        for fact in self.facts:
-            if fact["id"] not in self.essentials_done:
+        written: dict[str, bool] = {}
+        for fid in new_ids:
+            fact = self._fact_by_id(fid)
+            if fact is None or "Divers" in fact.get("tags", []):
                 continue
-            if "Divers" in fact.get("tags", []):
-                continue
-            entry = self.derived.get(fact["id"], {})
+            entry = self.derived.get(fid, {})
             keywords = entry.get("summary_keywords", [])
             if not isinstance(keywords, list):
                 continue
-            tags = fact.get("tags") or []
-            for tag in tags:
+            for tag in fact.get("tags") or []:
                 bucket = by_tag.setdefault(tag, [])
                 for kw in keywords:
-                    if isinstance(kw, str) and kw and kw not in bucket:
-                        bucket.append(kw)
+                    if not isinstance(kw, str) or not kw:
+                        continue
+                    clean = self._sanitize_keyword(kw, tag)
+                    if clean is None:
+                        continue
+                    if clean in bucket:
+                        written[fid] = True
+                        continue
+                    bucket.append(clean)
+                    written[fid] = True
         entries = [{"tag": tag, "keywords": kws} for tag, kws in by_tag.items() if kws]
-        entries = self._filter_non_essential_keywords(entries)
-        return self._summary_to_markdown(entries)
+        return (
+            self._summary_to_markdown(entries),
+            [fid for fid in new_ids if written.get(fid)],
+        )
 
     @staticmethod
     def _fold(text: str) -> str:
@@ -468,55 +530,60 @@ class Conversation:
         logger.debug("RAW RESPONSE: %s", response.content[:800])
 
         response_text = parsed.get("response", "")
-        fact_ids = parsed.get("fact_ids", [])
-        level_map = {
-            fid: [s for s in level if isinstance(s, str)]
-            for fid, level in parsed.get("level", {}).items()
-            if isinstance(level, list)
+        known_fids = {f["id"] for f in self.facts}
+        detail_to_fact = {
+            d["id"]: f["id"] for f in self.facts for d in f.get("details", [])
         }
-        logger.info("fact_ids: %s | level: %s", fact_ids, level_map)
-        used_detail_ids = self._find_used_detail_ids(response_text)
-        if used_detail_ids:
-            logger.info("detail ids detected in response: %s", sorted(used_detail_ids))
-            facts_by_id = {f["id"]: f for f in self.facts}
-            for fid in fact_ids:
-                if not isinstance(fid, str) or fid not in facts_by_id:
-                    continue
-                own = {d["id"] for d in facts_by_id[fid].get("details", [])} & used_detail_ids
-                if not own:
-                    continue
-                current = level_map.get(fid, [])
-                level_map[fid] = sorted(set(current) | own)
-            logger.info("level after detail check: %s", level_map)
 
-        questioned_ids = self._find_questioned_detail_ids(query, response_text, fact_ids)
+        used_fact_ids: list[str] = []
+        for fid in parsed.get("used_fact_ids", []):
+            if not isinstance(fid, str):
+                continue
+            if fid in known_fids:
+                used_fact_ids.append(fid)
+            else:
+                logger.warning("unknown fact id from LLM: %r", fid)
+
+        used_detail_ids = {
+            d for d in parsed.get("used_detail_ids", []) if isinstance(d, str)
+        }
+        detected_ids = self._find_used_detail_ids(response_text)
+        if detected_ids:
+            logger.info("detail ids detected in response: %s", sorted(detected_ids))
+        questioned_ids = self._find_questioned_detail_ids(
+            query, response_text, used_fact_ids
+        )
         if questioned_ids:
             logger.info("details marked done via question match: %s", sorted(questioned_ids))
-            self.details_done.update(questioned_ids)
+        used_detail_ids |= detected_ids | questioned_ids
+
+        valid_detail_ids: set[str] = set()
+        for did in sorted(used_detail_ids):
+            fid = detail_to_fact.get(did)
+            if fid is None:
+                logger.warning("unknown detail id from LLM: %r", did)
+                continue
+            valid_detail_ids.add(did)
+            if fid not in used_fact_ids:
+                used_fact_ids.append(fid)
+
+        logger.info(
+            "used_fact_ids: %s | used_detail_ids: %s",
+            used_fact_ids, sorted(valid_detail_ids),
+        )
 
         logger.debug("PARSED RESPONSE: %s", response_text[:300])
 
-        new_essential_ids = []
-        has_new_essential = False
-        for fid in fact_ids:
-            if not isinstance(fid, str):
-                continue
-            level = level_map.get(fid, [])
-            if fid not in self.essentials_done:
-                new_essential_ids.append(fid)
-                has_new_essential = True
-            self.essentials_done.add(fid)
-            for sub_id in level:
-                self.details_done.add(sub_id)
+        new_essential_ids = [fid for fid in used_fact_ids if fid not in self.essentials_done]
+        self.essentials_done.update(used_fact_ids)
+        self.details_done.update(valid_detail_ids)
 
-        divers_fact_ids = {f["id"] for f in self.facts if "Divers" in f.get("tags", [])}
-        has_non_divers_fact = any(fid not in divers_fact_ids for fid in new_essential_ids)
+        new_summary_ids = [fid for fid in used_fact_ids if fid not in self.summary_ids]
+        turn_summary, written_ids = self._summary_delta(new_summary_ids)
+        self.summary_ids.extend(written_ids)
+        logger.debug("summary ids written: %s", written_ids)
 
-        summary = self._precomputed_summary()
-        turn_summary = summary if (has_new_essential and summary and has_non_divers_fact) else ""
-        logger.debug("SUMMARY: %s", summary[:300])
-
-        suggestions = self._precomputed_suggestions(fact_ids)
+        suggestions = self._precomputed_suggestions(used_fact_ids)
         self.last_topic = "; ".join(
             f["tags"][0] for f in self.facts
             if f["id"] in new_essential_ids and f.get("tags")
