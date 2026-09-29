@@ -7,22 +7,17 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from json_repair import repair_json
 
 from src.llm_client import llm
-from src.generation.prompts import SYSTEM_PROMPT, FOLLOWUP_TEMPLATE
+from src.generation.prompts import NAME, SYSTEM_PROMPT, FOLLOWUP_TEMPLATE
 from src.generation.context_builder import load_facts, build_context, extract_topics
+from src.generation.precompute import load_all_derived, load_all_tag_suggestions
 
 logger = logging.getLogger(__name__)
 
-NAME = "Arthur"
-
 _PARSE_FALLBACK = {
     "response": "",
-    "summary": [],
     "fact_ids": [],
     "level": {},
-    "suggestions": [],
 }
-
-_MAX_KEYWORD_WORDS = 10
 
 _LETTER_STOPWORDS = frozenset(chr(c) for c in range(ord("a"), ord("z") + 1))
 
@@ -41,18 +36,13 @@ toutefois
 
 _SUGG_STOPWORDS = _STOPWORDS | _SUGG_EXTRA
 
-_CUT_MARKERS = re.compile(
-    r"\s+(?:codé|créé|développé|utilisé|réalisé|conçu|fait|appliqué|entraîné|construit|"
-    r"implémenté|écrit|permet|permettant|visant|destiné|destinée|destinés|pour|afin|avec|"
-    r"sans|est|sont|qui|ainsi|offrant|incluant)\b",
-    re.IGNORECASE,
-)
-
 
 class Conversation:
 
     def __init__(self):
         self.facts = load_facts()
+        self.derived = load_all_derived()
+        self.tag_suggestions = load_all_tag_suggestions()
         self.all_tags = extract_topics(self.facts)
         self.essentials_done: set[str] = set()
         self.details_done: set[str] = set()
@@ -103,13 +93,10 @@ class Conversation:
             return {**_PARSE_FALLBACK, "response": raw_content}
 
         parsed.setdefault("response", raw_content)
-        parsed.setdefault("summary", [])
         if not isinstance(parsed.get("fact_ids"), list):
             parsed["fact_ids"] = []
         if not isinstance(parsed.get("level"), dict):
             parsed["level"] = {}
-        if not isinstance(parsed.get("suggestions"), list):
-            parsed["suggestions"] = []
 
         return parsed
 
@@ -117,6 +104,9 @@ class Conversation:
     def _target_display(target: dict | None) -> str:
         if not target:
             return "(aucune)"
+        tag = target.get("tag", "")
+        if tag:
+            return f"[tag: {tag}]"
         fact_id = target.get("fact_id", "")
         detail_id = target.get("detail_id", "")
         if detail_id:
@@ -171,37 +161,83 @@ class Conversation:
                         covered.append(tag)
         return "; ".join(covered) if covered else "(none)"
 
-    def _build_suggestions(self, llm_suggestions: list) -> list[dict]:
-        result = []
-        seen = set()
-        for s in llm_suggestions:
-            if isinstance(s, str):
-                s = {"question": s}
-            if not isinstance(s, dict):
+    def _derived_detail_questions(self, fact: dict) -> list[dict]:
+        questions = self.derived.get(fact["id"], {}).get("details", {})
+        if not isinstance(questions, dict):
+            return []
+        out = []
+        for d in fact.get("details", []):
+            if d["id"] in self.details_done:
                 continue
-            question = s.get("question")
-            if not isinstance(question, str) or not question.strip():
-                continue
-            question = question.strip()
-            if question in seen:
-                continue
-            seen.add(question)
-            fact_id = s.get("fact_id")
-            detail_id = s.get("detail_id")
-            result.append({
-                "question": question,
-                "fact_id": fact_id if isinstance(fact_id, str) else "",
-                "detail_id": detail_id if isinstance(detail_id, str) else "",
-            })
-        return result[:3]
+            q = questions.get(d["id"])
+            if isinstance(q, str) and q.strip():
+                out.append({
+                    "question": q.strip(),
+                    "fact_id": fact["id"],
+                    "detail_id": d["id"],
+                    "tag": "",
+                })
+        return out
 
-    def _scope_tags(self, fact_ids: list) -> set:
+    def _derived_tag_question(self, tag: str) -> dict:
+        question = self.tag_suggestions.get(tag.strip().lower())
+        if not isinstance(question, str) or not question.strip():
+            question = f"Parle-moi de « {tag} » ?"
+        return {
+            "question": question.strip(),
+            "fact_id": "",
+            "detail_id": "",
+            "tag": tag,
+        }
+
+    def _suggestion_groups(self, fact_ids: list) -> list[list[dict]]:
         cited = {fid for fid in fact_ids if isinstance(fid, str)}
-        tags = set()
-        for fact in self.facts:
-            if fact["id"] in cited:
-                tags.update(t.strip().lower() for t in fact.get("tags", []))
-        return tags
+        ordered = sorted(self.facts, key=lambda f: 0 if f["id"] in cited else 1)
+        detail_groups: list[list[dict]] = []
+        for fact in ordered:
+            if fact["id"] not in self.essentials_done:
+                continue
+            group = self._derived_detail_questions(fact)
+            if group:
+                detail_groups.append(group)
+
+        remaining = self._remaining_topics()
+        tag_groups = [[self._derived_tag_question(tag)] for tag in remaining]
+
+        groups: list[list[dict]] = []
+        for i in range(max(len(detail_groups), len(tag_groups))):
+            if i < len(detail_groups):
+                groups.append(detail_groups[i])
+            if i < len(tag_groups):
+                groups.append(tag_groups[i])
+        return groups
+
+    def _precomputed_suggestions(self, fact_ids: list) -> list[dict]:
+        if not self._has_open_subjects():
+            return []
+        groups = self._suggestion_groups(fact_ids)
+        picked: list[dict] = []
+        seen: set[str] = set()
+        depth = 0
+        while len(picked) < 3:
+            reachable = False
+            for group in groups:
+                if depth >= len(group):
+                    continue
+                reachable = True
+                s = group[depth]
+                if s["question"] in seen:
+                    continue
+                if self._suggestion_targets_done(s) or self._suggestion_reveals_detail(s):
+                    continue
+                seen.add(s["question"])
+                picked.append(s)
+                if len(picked) >= 3:
+                    break
+            if not reachable:
+                break
+            depth += 1
+        return picked
 
     def _fact_by_id(self, fact_id: str) -> dict | None:
         for fact in self.facts:
@@ -216,7 +252,14 @@ class Conversation:
                     return fact
         return None
 
-    def resolve_suggestion_target(self, fact_id: str | None, detail_id: str | None) -> dict | None:
+    def resolve_suggestion_target(
+        self,
+        fact_id: str | None,
+        detail_id: str | None,
+        tag: str | None = None,
+    ) -> dict | None:
+        if tag:
+            return {"fact_id": "", "detail_id": "", "tag": tag}
         fact = None
         resolved_detail = ""
         if detail_id:
@@ -227,70 +270,7 @@ class Conversation:
             fact = self._fact_by_id(fact_id)
         if fact is None:
             return None
-        return {"fact_id": fact["id"], "detail_id": resolved_detail}
-
-    def _detail_suggestion_target(self, fact_ids: list, suggestions: list) -> tuple | None:
-        scope = self._scope_tags(fact_ids)
-        if not scope:
-            return None
-        open_pairs = []
-        for fact in self.facts:
-            if fact["id"] not in self.essentials_done:
-                continue
-            if not any(t.strip().lower() in scope for t in fact.get("tags", [])):
-                continue
-            for d in fact.get("details", []):
-                if d["id"] not in self.details_done:
-                    open_pairs.append((fact, d))
-        if not open_pairs:
-            return None
-
-        def is_detail_question(s: dict) -> bool:
-            if s["detail_id"]:
-                return any(s["detail_id"] == d["id"] for _fact, d in open_pairs)
-            sw = {w for w in self._norm_words(s["question"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
-            if not sw:
-                return False
-            for _fact, d in open_pairs:
-                id_tokens = {t for t in d["id"].lower().split("_") if len(t) > 2}
-                if sw & id_tokens:
-                    return True
-                cw = {w for w in self._norm_words(d["content"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
-                if len(sw & cw) >= 2:
-                    return True
-            return False
-
-        if any(is_detail_question(s) for s in suggestions):
-            return None
-        fact, detail = open_pairs[0]
-        return fact, detail
-
-    def _detail_suggestion_out_of_scope(self, s: dict, fact_ids: list) -> bool:
-        scope = self._scope_tags(fact_ids)
-        fact = None
-        if s["detail_id"]:
-            fact = self._fact_of_detail(s["detail_id"])
-        if fact is None and s["fact_id"]:
-            fact = self._fact_by_id(s["fact_id"])
-        if fact is not None:
-            return not any(t.strip().lower() in scope for t in fact.get("tags", []))
-        sw = {w for w in self._norm_words(s["question"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
-        if len(sw) < 2:
-            return False
-        matched_in = False
-        matched_out = False
-        for fact in self.facts:
-            fact_scope = any(t.strip().lower() in scope for t in fact.get("tags", []))
-            for d in fact.get("details", []):
-                id_tokens = {t for t in d["id"].lower().split("_") if len(t) >= 4}
-                cw = {w for w in self._norm_words(d["content"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
-                if not (sw & id_tokens) and len(sw & cw) < 2:
-                    continue
-                if fact_scope:
-                    matched_in = True
-                else:
-                    matched_out = True
-        return matched_out and not matched_in
+        return {"fact_id": fact["id"], "detail_id": resolved_detail, "tag": ""}
 
     @classmethod
     def _content_words(cls, text: str) -> set[str]:
@@ -303,7 +283,7 @@ class Conversation:
             out.add(w)
         return out
 
-    def _suggestion_lacks_detail_support(self, s: dict) -> bool:
+    def _suggestion_reveals_detail(self, s: dict) -> bool:
         if not s["detail_id"]:
             return False
         fact = self._fact_of_detail(s["detail_id"])
@@ -325,144 +305,11 @@ class Conversation:
             for d in f.get("details", []):
                 if d["id"] in self.details_done:
                     known |= self._content_words(d["content"])
-        if not (qw & known):
-            logger.info("suggestion dropped (no anchor on known info): %r", s)
-            return True
         spoiler = qw & (self._content_words(detail["content"]) - known)
         if len(spoiler) >= 2:
             logger.info("suggestion dropped (reveals detail): %r -> %s", s, sorted(spoiler))
             return True
         return False
-
-    @classmethod
-    def _short_subject(cls, raw: str) -> str:
-        text = raw.replace("**", "").strip().lstrip("|-[]#*> ").rstrip(".")
-        if " : " in text:
-            text = text.split(" : ", 1)[1].strip()
-        text = text.split(". ")[0].strip()
-        m = _CUT_MARKERS.search(text)
-        if m:
-            cand = text[:m.start()].strip().strip(",;(")
-            if len(cand.split()) >= 2:
-                text = cand
-        if len(text) > 70:
-            text = text[:70].rsplit(" ", 1)[0] + "…"
-        return text.strip()
-
-    def _detail_question_fallback(self, fact: dict, detail: dict) -> str:
-        subject = self._short_subject(detail["content"])
-        if not subject:
-            subject = self._short_subject(fact["essential"])
-        if not subject:
-            return ""
-        first_word = subject.split(" ", 1)[0].strip(",;:()«».")
-        if not re.fullmatch(r"[A-ZÀ-Þ/]+", first_word):
-            subject = subject[0].lower() + subject[1:]
-        return f"Peux-tu m'en dire plus sur le {subject} ?"
-
-    async def _phrase_detail_question(self, fact: dict, detail: dict) -> str:
-        fallback = self._detail_question_fallback(fact, detail)
-        base = (
-            "Formule UNE question de suggestion pour un chat personnel, en français, à la troisième personne.\n"
-            f"Essentiel déjà donné : {fact['essential']}\n"
-            f"Détail NON encore donné : {detail['content'][:400]}\n"
-            "Règles : question COURTE (10 mots max), VAGUE, GÉNÉRALE. Ne répète et ne résume AUCUN fait "
-            "du détail dans la question — elle doit seulement amener l'interlocuteur à en parler. "
-            "Exemple : au lieu de « Comment a-t-il géré le projet seul avec un tuteur limité aux données ? », "
-            "écris « Avec qui a-t-il travaillé sur le projet ? ». "
-            "Commence par Qui/Quel/Quelle/Comment/Avec..., termine par '?', aucun guillemet, aucune autre "
-            "phrase. Retourne UNIQUEMENT la question."
-        )
-        dw = {w for w in self._norm_words(detail["content"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
-        for attempt in range(2):
-            prompt = base if attempt == 0 else base + "\nENCORE PLUS COURT ET VAGUE : 6 mots maximum."
-            try:
-                resp = await llm.ainvoke(prompt)
-                q = resp.content.strip().splitlines()[0].strip().strip('"«»')
-                qw = {w for w in self._norm_words(q) if w not in _SUGG_STOPWORDS and len(w) > 2}
-                if (
-                    q.endswith("?")
-                    and 3 <= len(q.split()) <= 10
-                    and len(q) <= 110
-                    and len(qw & dw) < 4
-                ):
-                    return q
-            except Exception:
-                logger.exception("detail question phrasing failed")
-        return fallback
-
-    @staticmethod
-    def _strip_md(text: str) -> str:
-        return text.replace("**", "").strip()
-
-    def _parse_summary_markdown(self, text: str) -> list[dict]:
-        entries: list[dict] = []
-        tag = ""
-        keywords: list[str] = []
-
-        def flush():
-            nonlocal tag, keywords
-            if tag and keywords:
-                entries.append({"tag": tag, "keywords": keywords})
-            tag = ""
-            keywords = []
-
-        for raw_line in text.split("\n"):
-            line = raw_line.strip()
-            if not line:
-                continue
-            if line.startswith("**") and line.endswith("**") and line.count("**") == 2:
-                flush()
-                tag = line.strip("*").strip()
-                continue
-            if not tag:
-                continue
-            for part in line.split(","):
-                part = part.strip()
-                if part and len(part.split()) <= _MAX_KEYWORD_WORDS:
-                    keywords.append(part)
-        flush()
-        return entries
-
-    def _normalize_summary(self, raw) -> list[dict]:
-        if isinstance(raw, str):
-            raw = raw.replace("\\n", "\n")
-            items = self._parse_summary_markdown(raw)
-        elif isinstance(raw, list):
-            items = raw
-        else:
-            return []
-
-        entries: list[dict] = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            tag = item.get("tag")
-            if not isinstance(tag, str):
-                continue
-            tag = self._strip_md(tag)
-            if not tag:
-                continue
-            raw_keywords = item.get("keywords")
-            if not isinstance(raw_keywords, list):
-                continue
-            keywords: list[str] = []
-            seen: set[str] = set()
-            for kw in raw_keywords:
-                if not isinstance(kw, str):
-                    continue
-                kw = self._strip_md(kw).strip().rstrip(",;.")
-                if not kw or len(kw.split()) > _MAX_KEYWORD_WORDS:
-                    continue
-                key = kw.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                keywords.append(kw)
-            if not keywords:
-                continue
-            entries.append({"tag": tag, "keywords": keywords})
-        return entries
 
     @staticmethod
     def _summary_to_markdown(entries: list[dict]) -> str:
@@ -504,6 +351,27 @@ class Conversation:
             else:
                 logger.info("summary tag dropped (all keywords non-essential): %r", entry["tag"])
         return kept
+
+    def _precomputed_summary(self) -> str:
+        by_tag: dict[str, list[str]] = {}
+        for fact in self.facts:
+            if fact["id"] not in self.essentials_done:
+                continue
+            if "Divers" in fact.get("tags", []):
+                continue
+            entry = self.derived.get(fact["id"], {})
+            keywords = entry.get("summary_keywords", [])
+            if not isinstance(keywords, list):
+                continue
+            tags = fact.get("tags") or []
+            for tag in tags:
+                bucket = by_tag.setdefault(tag, [])
+                for kw in keywords:
+                    if isinstance(kw, str) and kw and kw not in bucket:
+                        bucket.append(kw)
+        entries = [{"tag": tag, "keywords": kws} for tag, kws in by_tag.items() if kws]
+        entries = self._filter_non_essential_keywords(entries)
+        return self._summary_to_markdown(entries)
 
     @staticmethod
     def _fold(text: str) -> str:
@@ -557,6 +425,8 @@ class Conversation:
         return hit
 
     def _suggestion_targets_done(self, s: dict) -> bool:
+        if s.get("tag"):
+            return False
         if s["detail_id"]:
             return s["detail_id"] in self.details_done
         sw = {w for w in self._norm_words(s["question"]) if w not in _SUGG_STOPWORDS and len(w) > 2}
@@ -583,8 +453,8 @@ class Conversation:
         return False
 
     async def ask(self, query: str, target_fact_id: str | None = None,
-                  target_detail_id: str | None = None) -> dict:
-        target = self.resolve_suggestion_target(target_fact_id, target_detail_id)
+                  target_detail_id: str | None = None, target_tag: str | None = None) -> dict:
+        target = self.resolve_suggestion_target(target_fact_id, target_detail_id, target_tag)
         messages = self._build_messages(query, target)
 
         start = time.perf_counter()
@@ -604,10 +474,7 @@ class Conversation:
             for fid, level in parsed.get("level", {}).items()
             if isinstance(level, list)
         }
-        llm_suggestions = parsed.get("suggestions", [])
-
         logger.info("fact_ids: %s | level: %s", fact_ids, level_map)
-
         used_detail_ids = self._find_used_detail_ids(response_text)
         if used_detail_ids:
             logger.info("detail ids detected in response: %s", sorted(used_detail_ids))
@@ -629,11 +496,6 @@ class Conversation:
 
         logger.debug("PARSED RESPONSE: %s", response_text[:300])
 
-        summary_entries = self._normalize_summary(parsed.get("summary", []))
-        summary_entries = self._filter_non_essential_keywords(summary_entries)
-        summary = self._summary_to_markdown(summary_entries)
-        logger.debug("SUMMARY: %s", summary[:300])
-
         new_essential_ids = []
         has_new_essential = False
         for fid in fact_ids:
@@ -650,25 +512,11 @@ class Conversation:
         divers_fact_ids = {f["id"] for f in self.facts if "Divers" in f.get("tags", [])}
         has_non_divers_fact = any(fid not in divers_fact_ids for fid in new_essential_ids)
 
+        summary = self._precomputed_summary()
         turn_summary = summary if (has_new_essential and summary and has_non_divers_fact) else ""
+        logger.debug("SUMMARY: %s", summary[:300])
 
-        suggestions = self._build_suggestions(llm_suggestions)
-        suggestions = [s for s in suggestions if not self._suggestion_targets_done(s)]
-        suggestions = [s for s in suggestions if not self._detail_suggestion_out_of_scope(s, fact_ids)]
-        suggestions = [s for s in suggestions if not self._suggestion_lacks_detail_support(s)]
-        if not self._has_open_subjects():
-            suggestions = []
-        else:
-            target = self._detail_suggestion_target(fact_ids, suggestions)
-            if target:
-                question = await self._phrase_detail_question(*target)
-                if question:
-                    backstop = {
-                        "question": question,
-                        "fact_id": target[0]["id"],
-                        "detail_id": target[1]["id"],
-                    }
-                    suggestions = ([backstop] + suggestions)[:3]
+        suggestions = self._precomputed_suggestions(fact_ids)
         self.last_topic = "; ".join(
             f["tags"][0] for f in self.facts
             if f["id"] in new_essential_ids and f.get("tags")

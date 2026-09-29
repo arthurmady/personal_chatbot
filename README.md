@@ -10,7 +10,7 @@ Assistant personnel conversationnel qui présente une personne, en remplaçant l
 - **Résumé latéral** — résumé par tag (idées de l'essentiel uniquement), fusionné côté client à chaque tour.
 - **Persistance des sessions** — historique, résumés et états de faits sauvegardés en JSON sur disque (écriture atomique, verrouillage thread).
 - **Import GitHub** — régénère des faits "Projets" à partir des README de vos dépôts.
-- **Panneau d'admin** — stats, sessions, upload/suppression des fichiers de données, refresh GitHub (`/admin`).
+- **Panneau d'admin** — stats, sessions, visualisation des fichiers de données (vue faits + JSON brut), upload/suppression, génération IA des suggestions et résumés, refresh GitHub (`/admin`).
 - **Personnage animé** — avatar SVG interactif (Wobbi) réactif aux états du chat (idle, thinking, sleeping…).
 - **Sécurité** — rate limiting IP (chat + login), cookie admin `httponly`, comparaison de mot de passe en temps constant, contrôle des uploads.
 
@@ -38,8 +38,10 @@ backend/
     generation/
       prompts.py          # SYSTEM_PROMPT + FOLLOWUP_TEMPLATE
       context_builder.py  # Construction du contexte selon états des faits
+      precompute.py       # Génération des suggestions/résumés à l'upload (1 appel LLM)
       conversation.py     # Cœur de la logique : parsing, états, suggestions, filtres
   data/                   # Fichiers de faits + sessions.json
+    derived/              # Suggestions/résumés pré-calculés (générés à l'upload)
 frontend/
   src/App.jsx             # Chat
   src/AdminPanel.jsx      # Panel /admin
@@ -47,11 +49,18 @@ frontend/
 deploy/                   # setup.sh (serveur) + deploy.sh (mise à jour)
 ```
 
+### Génération à l'upload (`POST /admin/data`)
+
+1. Le fichier est écrit dans `data/`, puis `precompute.py` est lancé en tâche de fond.
+2. Un unique appel LLM produit, pour chaque tag une question de suggestion (`tags`), et pour chaque fait `summary_keywords` (idées de l'essentiel) et `details` (1 question vague par détail). Aucune suggestion n'est produite pour les essentiels : ce sont les tags qui ouvrent l'accès aux essentiels.
+3. Le résultat est validé puis écrit dans `data/derived/<fichier>.json` ; le statut (`none` / `running` / `ok` / `error`) est visible dans l'onglet Données, avec un bouton de relance.
+4. Chaque contenu généré est éditable à la main depuis le bouton « Généré » : résumé, questions essentielles et questions détail, écrit via `PUT /admin/data/{fichier}/derived` (validation + normalisation côté serveur).
+
 ### Flux d'une requête (`POST /chat`)
 
 1. `context_builder` assemble le contexte : essentiels toujours visibles, détails `[id]` affichés en clair seulement si le fait est `essential_given`, sinon verrouillés (`contenu réservé`).
-2. Le LLM répond en JSON strict : `response`, `summary`, `fact_ids`, `level`, `suggestions`.
-3. `conversation.py` détecte les détails réellement utilisés (n-grammes + overlap), met à jour les états, filtre les suggestions (déjà données, hors périmètre, ancrage/anti-spoil) et garantit au besoin une question vague générée par un second appel LLM (repli déterministe si échec).
+2. **Un seul appel LLM** répond en JSON strict : `response`, `fact_ids`, `level`.
+3. `conversation.py` détecte les détails réellement utilisés (n-grammes + overlap), met à jour les états, puis lit dans `data/derived/` les suggestions et le résumé — sans appel LLM supplémentaire. Les suggestions sont de 2 formes : une question par tag restant à couvrir (cible `[tag: X]`, réponse = tous les essentiels du tag) ou une question de détail pour un fait déjà donné (filtrée : déjà donnée, anti-spoil).
 
 ## Installation
 
@@ -131,6 +140,34 @@ Chaque fichier `backend/data/*.json` (hors `sessions.json`) :
 - **`details[].content`** — réservé : dévoilé uniquement quand l'utilisateur pose une question ciblée sur le fait.
 - **`details[].id`** — slug stable (généré par l'import GitHub), réutilisé par les suggestions.
 
+### Données pré-calculées (`backend/data/derived/*.json`)
+
+Générées à l'upload par `precompute.py`, une entrée par fichier source :
+
+```json
+{
+  "schema_version": 2,
+  "source": "data.json",
+  "generated_at": 1790000000.0,
+  "fact_count": 32,
+  "tag_count": 12,
+  "tags": {
+    "Expériences": "Quelles ont été ses principales expériences ?"
+  },
+  "facts": {
+    "exp_acme": {
+      "tags": ["Expériences"],
+      "summary_keywords": ["Acme : stage 2024"],
+      "details": { "acme_equipe": "Avec qui a-t-il travaillé ?" }
+    }
+  }
+}
+```
+
+- **`tags`** — 1 question de suggestion par tag. Cliquée, elle cible `[tag: X]` : la réponse donne les essentiels de TOUS les faits de ce tag (tous passent en `done`), et le résumé s'affiche.
+- **`summary_keywords`** — idées extraites de l'essentiel, regroupées par tag au moment du chat.
+- **`details`** — 1 question vague (zéro spoil) par détail, utilisée tant que le détail n'est pas donné.
+
 ### Import des projets GitHub
 
 ```bash
@@ -150,8 +187,12 @@ ou bouton **Rafraîchir** dans l'onglet GitHub du panneau admin (`GITHUB_USER_UR
 | `GET /admin/sessions` | Liste des sessions |
 | `GET /admin/sessions/{id}` | Détail d'une session |
 | `DELETE /admin/sessions/{id}` | Suppression |
-| `GET|POST /admin/data` | Liste / upload de fichiers de faits (10 Mo max) |
-| `DELETE /admin/data/{file}` | Suppression d'un fichier |
+| `GET|POST /admin/data` | Liste (avec statut de génération) / upload de fichiers de faits (10 Mo max) |
+| `GET /admin/data/{file}` | Contenu d'un fichier (structure + JSON brut) |
+| `GET /admin/data/{file}/derived` | Contenu généré d'un fichier (structure + JSON brut) |
+| `PUT /admin/data/{file}/derived` | Écriture manuelle du contenu généré (édition admin) |
+| `POST /admin/data/{file}/recompute` | Relance la génération IA d'un fichier |
+| `DELETE /admin/data/{file}` | Suppression d'un fichier (et de son dérivé) |
 | `POST /admin/refresh-github` | Régénère les faits GitHub |
 
 ## Déploiement
