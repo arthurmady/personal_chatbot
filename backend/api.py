@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 import os
 import time
@@ -18,8 +20,11 @@ from pydantic import BaseModel
 from src import session_store
 from src.admin_auth import login, verify_token, revoke_token
 from src.fetch_github import fetch_github_readmes
+from src.generation import precompute
 from src.generation.conversation import Conversation
 
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -28,7 +33,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -40,6 +45,7 @@ class AskRequest(BaseModel):
     query: str
     target_fact_id: str | None = None
     target_detail_id: str | None = None
+    target_tag: str | None = None
 
     def model_post_init(self, __context):
         if len(self.query) > 2000:
@@ -55,6 +61,10 @@ class AskResponse(BaseModel):
 
 class LoginRequest(BaseModel):
     password: str
+
+
+class DerivedUpdate(BaseModel):
+    content: dict
 
 
 _login_attempts: dict[str, list[float]] = defaultdict(list)
@@ -111,6 +121,8 @@ async def chat(request: AskRequest, request_obj: Request):
             conv = Conversation()
             conv.essentials_done = set(stored.get("essentials_done", []))
             conv.details_done = set(stored.get("details_done", []))
+            conv.summary_ids = list(stored.get("summary_ids", []))
+            conv.prune_summary_ids(stored.get("summaries", []))
             sessions[session_id] = conv
         else:
             sessions[session_id] = Conversation()
@@ -120,7 +132,12 @@ async def chat(request: AskRequest, request_obj: Request):
 
     session_store.append_message(session_id, "user", request.query)
 
-    result = await conv.ask(request.query, request.target_fact_id, request.target_detail_id)
+    result = await conv.ask(
+        request.query,
+        request.target_fact_id,
+        request.target_detail_id,
+        request.target_tag,
+    )
     turn_summary = result.get("turn_summary", "")
 
     session_store.record_response(
@@ -130,6 +147,7 @@ async def chat(request: AskRequest, request_obj: Request):
         turn_summary,
         list(conv.essentials_done),
         list(conv.details_done),
+        list(conv.summary_ids),
     )
 
     return {
@@ -200,17 +218,152 @@ async def admin_stats(_=Depends(verify_token)):
 
 DATA_DIR = Path("data")
 
+_derived_jobs: dict[str, dict] = {}
+
+
+def _derived_status(name: str) -> dict:
+    job = _derived_jobs.get(name)
+    if job:
+        return dict(job)
+    dest = precompute.derived_path(name)
+    if dest.is_file():
+        try:
+            data = json.loads(dest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        return {
+            "status": "ok",
+            "error": "",
+            "fact_count": data.get("fact_count", 0),
+            "tag_count": data.get("tag_count", 0),
+            "generated_at": data.get("edited_at") or data.get("generated_at") or dest.stat().st_mtime,
+        }
+    return {"status": "none", "error": "", "fact_count": 0, "tag_count": 0, "generated_at": 0}
+
+
+async def _run_precompute(name: str) -> None:
+    _derived_jobs[name] = {
+        "status": "running",
+        "error": "",
+        "fact_count": 0,
+        "tag_count": 0,
+        "generated_at": time.time(),
+    }
+    try:
+        dest = await precompute.generate_for_source(DATA_DIR / name)
+        data = json.loads(dest.read_text(encoding="utf-8"))
+        _derived_jobs[name] = {
+            "status": "ok",
+            "error": "",
+            "fact_count": data.get("fact_count", 0),
+            "tag_count": data.get("tag_count", 0),
+            "generated_at": data.get("generated_at", time.time()),
+        }
+    except Exception as exc:
+        logger.exception("precompute failed for %s", name)
+        _derived_jobs[name] = {
+            "status": "error",
+            "error": str(exc),
+            "fact_count": 0,
+            "tag_count": 0,
+            "generated_at": time.time(),
+        }
+
+
+def _start_precompute(name: str) -> None:
+    if name == "sessions.json":
+        return
+    asyncio.create_task(_run_precompute(name))
+
 
 @app.get("/admin/data")
 async def admin_list_data_files(_=Depends(verify_token)):
     files = []
     for f in sorted(DATA_DIR.glob("*.json")):
+        if f.name == "sessions.json":
+            continue
         files.append({
             "name": f.name,
             "size": f.stat().st_size,
             "modified": f.stat().st_mtime,
+            "derived": _derived_status(f.name),
         })
     return files
+
+
+@app.post("/admin/data/{filename}/recompute")
+async def admin_recompute_data(filename: str, _=Depends(verify_token)):
+    target = _resolve_data_file(filename)
+    if target is None:
+        return {"error": "file not found"}
+    job = _derived_jobs.get(target.name)
+    if job and job.get("status") == "running":
+        return {"error": "génération déjà en cours"}
+    _start_precompute(target.name)
+    return {"started": target.name}
+
+
+def _resolve_data_file(filename: str) -> Path | None:
+    safe_name = Path(filename).name
+    target = DATA_DIR / safe_name
+    if not target.resolve().is_relative_to(DATA_DIR.resolve()):
+        return None
+    if not target.is_file() or target.suffix != ".json":
+        return None
+    return target
+
+
+@app.get("/admin/data/{filename}/derived")
+async def admin_get_derived_file(filename: str, _=Depends(verify_token)):
+    if Path(filename).name == "sessions.json":
+        return {"error": "file not found"}
+    path = precompute.derived_path(Path(filename).name)
+    if not path.is_file():
+        return {"error": "derived not found"}
+    raw = path.read_text(encoding="utf-8")
+    try:
+        content = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"name": path.name, "content": None, "raw": raw, "error": "invalid json"}
+    return {"name": path.name, "source": Path(filename).name, "content": content, "raw": raw}
+
+
+@app.put("/admin/data/{filename}/derived")
+async def admin_update_derived(filename: str, payload: DerivedUpdate, _=Depends(verify_token)):
+    if Path(filename).name == "sessions.json":
+        return {"error": "file not found"}
+    target = _resolve_data_file(filename)
+    if target is None:
+        return {"error": "file not found"}
+    job = _derived_jobs.get(target.name)
+    if job and job.get("status") == "running":
+        return {"error": "génération en cours, réessayez à la fin"}
+    try:
+        dest = precompute.save_derived(target.name, payload.content)
+    except (ValueError, TypeError) as exc:
+        return {"error": str(exc)}
+    data = json.loads(dest.read_text(encoding="utf-8"))
+    _derived_jobs.pop(target.name, None)
+    return {
+        "saved": target.name,
+        "fact_count": data.get("fact_count", 0),
+        "edited_at": data.get("edited_at", 0),
+    }
+
+
+@app.get("/admin/data/{filename}")
+async def admin_get_data_file(filename: str, _=Depends(verify_token)):
+    if Path(filename).name == "sessions.json":
+        return {"error": "file not found"}
+    target = _resolve_data_file(filename)
+    if target is None:
+        return {"error": "file not found"}
+    raw = target.read_text(encoding="utf-8")
+    try:
+        content = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"name": target.name, "content": None, "raw": raw, "error": "invalid json"}
+    return {"name": target.name, "content": content, "raw": raw}
 
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
@@ -228,6 +381,7 @@ async def admin_upload_data(file: UploadFile = File(...), _=Depends(verify_token
     if not dest.resolve().is_relative_to(DATA_DIR.resolve()):
         return {"error": "invalid filename"}
     dest.write_bytes(content)
+    _start_precompute(safe_name)
     return {"uploaded": safe_name}
 
 
@@ -239,6 +393,10 @@ async def admin_delete_data(filename: str, _=Depends(verify_token)):
         return {"error": "invalid filename"}
     if target.exists() and target.suffix == ".json":
         target.unlink()
+        _derived_jobs.pop(safe_name, None)
+        derived = precompute.derived_path(safe_name)
+        if derived.is_file():
+            derived.unlink()
         return {"deleted": safe_name}
     return {"error": "file not found"}
 

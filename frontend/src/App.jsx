@@ -83,13 +83,15 @@ function mergeSummaries(entries) {
 }
 
 const DEFAULT_SUGGESTIONS = [
-  { question: "Qui est Arthur Mady ?", fact_id: "", detail_id: "" },
-  { question: "Quel est son parcours professionnel ?", fact_id: "", detail_id: "" },
-  { question: "Que recherche-t-il comme poste ?", fact_id: "", detail_id: "" },
+  { question: "Qui est Arthur Mady ?", fact_id: "", detail_id: "", tag: "" },
+  { question: "Quel est son parcours professionnel ?", fact_id: "", detail_id: "", tag: "" },
+  { question: "Que recherche-t-il comme poste ?", fact_id: "", detail_id: "", tag: "" },
 ];
 
 const normalizeSuggestion = (s) =>
-  typeof s === "string" ? { question: s, fact_id: "", detail_id: "" } : s;
+  typeof s === "string"
+    ? { question: s, fact_id: "", detail_id: "", tag: "" }
+    : { fact_id: "", detail_id: "", tag: "", ...s };
 
 function ChatApp() {
   const [question, setQuestion] = useState("");
@@ -187,6 +189,7 @@ function ChatApp() {
           query: textToSend,
           target_fact_id: picked && suggestion.fact_id ? suggestion.fact_id : null,
           target_detail_id: picked && suggestion.detail_id ? suggestion.detail_id : null,
+          target_tag: picked && suggestion.tag ? suggestion.tag : null,
         }),
       });
 

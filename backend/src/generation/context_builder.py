@@ -5,15 +5,19 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def load_facts_from_file(data_file: Path) -> list[dict]:
+    raw = data_file.read_text(encoding="utf-8")
+    data = json.loads(raw)
+    return data.get("facts", [])
+
+
 def load_facts() -> list[dict]:
     all_facts = []
     data_dir = Path("data")
     for data_file in sorted(data_dir.glob("*.json")):
         if data_file.name == "sessions.json":
             continue
-        raw = data_file.read_text(encoding="utf-8")
-        data = json.loads(raw)
-        all_facts.extend(data.get("facts", []))
+        all_facts.extend(load_facts_from_file(data_file))
     return all_facts
 
 
