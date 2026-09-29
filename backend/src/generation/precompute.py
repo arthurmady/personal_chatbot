@@ -1,11 +1,11 @@
 import json
 import logging
-import re
 import time
 from pathlib import Path
 
 from json_repair import repair_json
 from src.generation.context_builder import load_facts_from_file
+from src.generation.json_blob import extract_json_blob
 from src.generation.prompts import NAME
 from src.llm_client import llm
 
@@ -97,19 +97,8 @@ def build_tags_context(tags: list[str], facts: list[dict]) -> str:
     return TAGS_TEMPLATE.format(tags=", ".join(tags), essentials="\n".join(lines))
 
 
-def _extract_json_blob(raw: str) -> str:
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
-    if fence:
-        return fence.group(1)
-    first = raw.find("{")
-    last = raw.rfind("}")
-    if first != -1 and last > first:
-        return raw[first:last + 1]
-    return raw
-
-
 def _parse_json(raw: str) -> dict | None:
-    blob = _extract_json_blob(raw)
+    blob = extract_json_blob(raw)
     try:
         parsed = json.loads(blob)
         if isinstance(parsed, dict):

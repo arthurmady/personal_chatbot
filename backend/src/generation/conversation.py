@@ -9,6 +9,7 @@ from json_repair import repair_json
 from src.llm_client import llm
 from src.generation.prompts import NAME, SYSTEM_PROMPT, FOLLOWUP_TEMPLATE
 from src.generation.context_builder import load_facts, build_context, extract_topics
+from src.generation.json_blob import extract_json_blob
 from src.generation.precompute import load_all_derived, load_all_tag_suggestions
 
 logger = logging.getLogger(__name__)
@@ -72,18 +73,8 @@ class Conversation:
             lines.append(f"  {fid}: {status}")
         return "\n".join(lines)
 
-    def _extract_json_blob(self, raw_content: str) -> str:
-        fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_content, re.DOTALL)
-        if fence_match:
-            return fence_match.group(1)
-        first = raw_content.find("{")
-        last = raw_content.rfind("}")
-        if first != -1 and last > first:
-            return raw_content[first:last + 1]
-        return raw_content
-
     def _parse_response(self, raw_content: str) -> dict:
-        blob = self._extract_json_blob(raw_content)
+        blob = extract_json_blob(raw_content)
         try:
             parsed = json.loads(blob)
         except json.JSONDecodeError:
