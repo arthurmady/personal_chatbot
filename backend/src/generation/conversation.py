@@ -7,7 +7,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from json_repair import repair_json
 
 from src.llm_client import llm
-from src.generation.prompts import NAME, SYSTEM_PROMPT, FOLLOWUP_TEMPLATE
+from src.generation.prompts import CV_URL, NAME, SYSTEM_PROMPT, FOLLOWUP_TEMPLATE
 from src.generation.context_builder import load_facts, build_context, extract_topics
 from src.generation.json_blob import extract_json_blob
 from src.generation.precompute import load_all_derived, load_all_tag_suggestions
@@ -120,6 +120,7 @@ class Conversation:
         system_message = SystemMessage(
             content=SYSTEM_PROMPT.format(
                 name=NAME,
+                cv_url=CV_URL,
                 context=context,
                 remaining_topics=remaining_topics_display,
                 all_topics=all_topics,
@@ -385,7 +386,7 @@ class Conversation:
             kept_parts.append(part)
         out = re.sub(r"[\s:;,–\-]+$", "", " ".join(kept_parts)).strip()
         content = [w for w in self._norm_words(out) if w not in tag_tokens]
-        if len(content) < 2:
+        if len(content) < 1:
             logger.info("summary keyword dropped (non-essential): %r -> %r", kw, out)
             return None
         return out
@@ -434,25 +435,95 @@ class Conversation:
     def _norm_words(cls, text: str) -> list[str]:
         return [cls._fold(w) for w in re.sub(r"[^\w\s]", " ", text.lower()).split()]
 
-    def _find_used_detail_ids(self, response_text: str) -> set[str]:
-        resp_words = self._norm_words(response_text)
-        if len(resp_words) < 4:
-            return set()
-        resp_grams = {tuple(resp_words[i:i + 4]) for i in range(len(resp_words) - 3)}
-        resp_set = set(resp_words)
+    @classmethod
+    def _stem_words(cls, text: str) -> set[str]:
+        """Mots de contenu normalisés (sans accents, sans pluriel) : tolère la reformulation."""
+        out = set()
+        for w in cls._norm_words(text):
+            if w in _STOPWORDS or len(w) <= 2:
+                continue
+            out.add(w[:-1] if len(w) > 4 and w.endswith("s") else w)
+        return out
+
+    def _find_used_fact_ids(self, response_text: str) -> list[str]:
+        """Faits dont l'essentiel se retrouve dans la réponse, même reformulé.
+
+        Les mots communs à plusieurs faits ("stage", "ingénieur"…) ne prouvent
+        rien : il faut aussi retrouver ceux qui n'appartiennent qu'à ce fait
+        (nom d'entreprise, école, année).
+        """
+        resp = self._stem_words(response_text)
+        words_by_fact = {f["id"]: self._stem_words(f.get("essential") or "") for f in self.facts}
+        freq: dict[str, int] = {}
+        for words in words_by_fact.values():
+            for w in words:
+                freq[w] = freq.get(w, 0) + 1
+        used = []
+        for fid, words in words_by_fact.items():
+            if not words:
+                continue
+            hits = words & resp
+            distinctive = {w for w in words if freq[w] <= 2}
+            if (
+                len(hits) >= min(2, len(words))
+                and len(hits) / len(words) >= 0.5
+                and (not distinctive or len(distinctive & hits) / len(distinctive) >= 0.5)
+            ):
+                used.append(fid)
+        return used
+
+    def _find_used_detail_ids(self, response_text: str, visible_fact_ids: set[str]) -> set[str]:
+        """Détails visibles (donc donnables) dont le contenu se retrouve dans la réponse."""
+        resp = self._stem_words(response_text)
         used: set[str] = set()
         for fact in self.facts:
+            if fact["id"] not in visible_fact_ids:
+                continue
             for detail in fact.get("details", []):
-                words = self._norm_words(detail["content"])
-                if len(words) < 4:
-                    continue
-                if any(tuple(words[i:i + 4]) in resp_grams for i in range(len(words) - 3)):
-                    used.add(detail["id"])
-                    continue
-                cw = {w for w in words if w not in _STOPWORDS and len(w) > 2}
-                if len(cw) >= 2 and len(cw & resp_set) / len(cw) >= 0.6:
+                words = self._stem_words(detail["content"])
+                hits = len(words & resp)
+                if words and hits >= min(4, len(words)) and hits / len(words) >= 0.4:
                     used.add(detail["id"])
         return used
+
+    def _infer_usage(
+        self, query: str, response_text: str, target: dict | None
+    ) -> tuple[list[str], set[str]]:
+        """Faits et détails réellement donnés, déduits de la cible cliquée et de la réponse.
+
+        Le LLM n'est plus la source : un modèle qui reformule librement ne
+        recopie pas assez pour qu'on lui fasse confiance sur la comptabilité.
+        """
+        visible = set(self.essentials_done)
+        fact_ids = self._find_used_fact_ids(response_text)
+        detail_ids: set[str] = set()
+
+        if target:
+            if target.get("tag"):
+                tag = target["tag"].strip().lower()
+                fact_ids += [
+                    f["id"] for f in self.facts
+                    if tag in (t.strip().lower() for t in f.get("tags", []))
+                ]
+            elif target.get("detail_id"):
+                detail_ids.add(target["detail_id"])
+                fact_ids.append(target["fact_id"])
+            elif target.get("fact_id"):
+                fact_ids.append(target["fact_id"])
+            visible |= {fid for fid in fact_ids if fid in self.essentials_done}
+
+        detail_ids |= self._find_used_detail_ids(response_text, visible)
+        fact_ids = list(dict.fromkeys(fact_ids))
+        detail_ids |= self._find_questioned_detail_ids(query, response_text, fact_ids)
+
+        detail_to_fact = {
+            d["id"]: f["id"] for f in self.facts for d in f.get("details", [])
+        }
+        detail_ids = {d for d in detail_ids if d in detail_to_fact}
+        for did in sorted(detail_ids):
+            if detail_to_fact[did] not in fact_ids:
+                fact_ids.append(detail_to_fact[did])
+        return fact_ids, detail_ids
 
     def _find_questioned_detail_ids(self, query: str, response_text: str, fact_ids: list) -> set[str]:
         qw = {w for w in self._norm_words(query) if w not in _SUGG_STOPWORDS and len(w) > 2}
@@ -521,42 +592,14 @@ class Conversation:
         logger.debug("RAW RESPONSE: %s", response.content[:800])
 
         response_text = parsed.get("response", "")
-        known_fids = {f["id"] for f in self.facts}
-        detail_to_fact = {
-            d["id"]: f["id"] for f in self.facts for d in f.get("details", [])
-        }
-
-        used_fact_ids: list[str] = []
-        for fid in parsed.get("used_fact_ids", []):
-            if not isinstance(fid, str):
-                continue
-            if fid in known_fids:
-                used_fact_ids.append(fid)
-            else:
-                logger.warning("unknown fact id from LLM: %r", fid)
-
-        used_detail_ids = {
-            d for d in parsed.get("used_detail_ids", []) if isinstance(d, str)
-        }
-        detected_ids = self._find_used_detail_ids(response_text)
-        if detected_ids:
-            logger.info("detail ids detected in response: %s", sorted(detected_ids))
-        questioned_ids = self._find_questioned_detail_ids(
-            query, response_text, used_fact_ids
-        )
-        if questioned_ids:
-            logger.info("details marked done via question match: %s", sorted(questioned_ids))
-        used_detail_ids |= detected_ids | questioned_ids
-
-        valid_detail_ids: set[str] = set()
-        for did in sorted(used_detail_ids):
-            fid = detail_to_fact.get(did)
-            if fid is None:
-                logger.warning("unknown detail id from LLM: %r", did)
-                continue
-            valid_detail_ids.add(did)
-            if fid not in used_fact_ids:
-                used_fact_ids.append(fid)
+        used_fact_ids, valid_detail_ids = self._infer_usage(query, response_text, target)
+        llm_fact_ids = [f for f in parsed.get("used_fact_ids", []) if isinstance(f, str)]
+        llm_detail_ids = [d for d in parsed.get("used_detail_ids", []) if isinstance(d, str)]
+        if set(llm_fact_ids) != set(used_fact_ids) or set(llm_detail_ids) != valid_detail_ids:
+            logger.info(
+                "usage differs from LLM report: llm=(%s | %s) code=(%s | %s)",
+                llm_fact_ids, llm_detail_ids, used_fact_ids, sorted(valid_detail_ids),
+            )
 
         logger.info(
             "used_fact_ids: %s | used_detail_ids: %s",

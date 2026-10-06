@@ -15,8 +15,8 @@ DERIVED_DIR = Path("data/derived")
 SCHEMA_VERSION = 2
 _CHUNK_SIZE = 5
 
-MAX_QUESTION_CHARS = 110
-MAX_QUESTION_WORDS = 12
+MAX_QUESTION_CHARS = 130
+MAX_QUESTION_WORDS = 15
 MAX_SUMMARY_KEYWORD_WORDS = 10
 
 PRECOMPUTE_SYSTEM = """Tu prépares les données d'aide à la conversation d'un chat personnel qui présente {name} à la troisième personne.
@@ -24,9 +24,11 @@ On te donne une liste de TAGS et une liste de faits. Tu produis UNE question de 
 
 RÈGLES POUR TOUTE QUESTION :
 - Français, 3e personne : "Qu'a-t-il fait ?", jamais "Qu'as-tu fait ?".
-- COURTE : 10 mots maximum, 110 caractères maximum. Se termine par "?".
+- COURTE : 14 mots maximum, 130 caractères maximum. Se termine par "?".
 - ZÉRO SPOIL : la question n'apporte AUCUN élément de réponse. Elle n'utilise AUCUN mot qui n'existe que dans un contenu de détail non encore donné (personne, outil, lieu, chiffre, méthode, particulière, résultat).
-- Elle s'ancre sur une info déjà connue (nom tiré de l'Essentiel, nom du tag) si besoin pour rester non-ambiguë.
+- Elle est TOUJOURS ancrée sur le contexte du fait, tiré de l'Essentiel (entreprise, école, projet, sujet) : une question de détail ne doit jamais pouvoir se lire hors contexte.
+  Mauvais : "Comment a-t-il surmonté les limitations d'accès aux logs ?" (de quel stage parle-t-on ?)
+  Bon : "Comment a-t-il surmonté les limitations d'accès aux logs lors de son stage chez MBDA ?"
 - Si l'Essentiel est un simple NOM/LABEL, utilise "Qu'est-ce que [nom] ?" ou "Quelle est [nom] ?".
 - Jamais de guillemet autour de la question, jamais d'autre phrase que la question.
 
@@ -38,18 +40,20 @@ RÈGLES POUR TOUTE QUESTION :
 2. Pour CHAQUE fait, produis exactement :
 
    a. "summary_keywords" : 1 à 3 idées extraites UNIQUEMENT du champ "Essentiel".
-      - Format "Sujet : info", 10 mots max, jamais une phrase complète.
+      - Le plus COURT possible : le plus souvent le seul sujet, en 1 à 3 mots, jamais une phrase.
+      - Ajoute une info ("Sujet : info") UNIQUEMENT si elle distingue le fait d'un autre du même tag (une année, une durée, un diplôme) ; jamais d'adjectif ou de précision décorative ("régulière", "principalement"...).
       - Jamais du "Plus", jamais de contenu de détail.
-      - Exemple : essentiel "Stage chez Acme Corp en 2024" -> ["Acme Corp : stage 2024"].
+      - Exemples : "Pratique la musculation" -> ["Musculation"] ; "Anime des soirées en tant que DJ" -> ["DJ"] ; "Stage chez Acme Corp en 2024" -> ["Acme Corp : stage 2024"].
 
    b. "details" : un objet qui associe CHAQUE identifiant de détail fourni à UNE question vague.
       - Lis le détail UNIQUEMENT pour choisir le sujet de la question, jamais pour la rédiger.
       - La question reste GÉNÉRALE : elle amène l'interlocuteur à en parler sans rien révéler.
       - TEST : si AU MOINS DEUX mots de la question n'existent QUE dans le détail non donné, la question SPOILE -> réécris-la plus vague.
+      - Rappelle toujours dans la question le contexte de l'Essentiel (ex. "lors de son stage chez MBDA", "dans le projet KOP", "à l'IIT Madras").
       - Si l'Essentiel est un label, ancre la question dessus : "Qu'est-ce que [label] ?" adapté au détail.
 
 FORMAT DE SORTIE (strict, JSON seul, sans texte autour) :
-{{"tags": {{"<tag>": "Question ?"}}, "facts": {{"<id_du_fait>": {{"summary_keywords": ["Sujet : info"], "details": {{"<id_du_detail>": "Question ?"}}}}}}}}
+{{"tags": {{"<tag>": "Question ?"}}, "facts": {{"<id_du_fait>": {{"summary_keywords": ["Mot-clé court"], "details": {{"<id_du_detail>": "Question ?"}}}}}}}}
 
 Ne produis AUCUN tag ni AUCUN fait absent du contexte. Ne saute AUCUN tag, AUCUN fait ni AUCUN identifiant de détail.
 """
