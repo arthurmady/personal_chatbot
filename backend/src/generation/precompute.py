@@ -70,10 +70,6 @@ Essentiels par tag (jamais de détail) :
 {essentials}
 """
 
-PRECOMPUTE_TEMPLATE = """CONTEXTE DES FAITS :
-{context}
-"""
-
 
 def build_facts_context(facts: list[dict], tags: list[str]) -> str:
     blocks = []
