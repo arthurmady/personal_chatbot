@@ -122,6 +122,10 @@ def fetch_github_readmes(data_dir: str | Path = "data") -> dict:
         essential, details = _parse_readme(readme)
         if not essential:
             essential = name
+        # le suivi des détails donnés est global : l'id doit être unique d'un dépôt à l'autre
+        prefix = _slugify(name)
+        for detail in details:
+            detail["id"] = f"{prefix}_{detail['id']}"
 
         fact = {
             "id": name,

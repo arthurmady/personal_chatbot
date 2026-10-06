@@ -14,13 +14,14 @@ logging.basicConfig(
 
 from fastapi import FastAPI, Depends, Request, Cookie, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from src import session_store
 from src.admin_auth import login, verify_token, revoke_token
 from src.fetch_github import fetch_github_readmes
 from src.generation import precompute
+from src.generation.context_builder import validate_facts_data
 from src.generation.conversation import Conversation
 
 
@@ -130,14 +131,21 @@ async def chat(request: AskRequest, request_obj: Request):
 
     conv = sessions[session_id]
 
-    session_store.append_message(session_id, "user", request.query)
+    try:
+        result = await conv.ask(
+            request.query,
+            request.target_fact_id,
+            request.target_detail_id,
+            request.target_tag,
+        )
+    except Exception:
+        logger.exception("chat: échec de l'appel LLM (session %s)", session_id)
+        return JSONResponse(
+            {"detail": "Le service de réponse est momentanément indisponible, réessayez dans un instant."},
+            status_code=503,
+        )
 
-    result = await conv.ask(
-        request.query,
-        request.target_fact_id,
-        request.target_detail_id,
-        request.target_tag,
-    )
+    session_store.append_message(session_id, "user", request.query)
     turn_summary = result.get("turn_summary", "")
 
     session_store.record_response(
@@ -372,11 +380,17 @@ MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 @app.post("/admin/data")
 async def admin_upload_data(file: UploadFile = File(...), _=Depends(verify_token)):
     safe_name = Path(file.filename).name
-    if not safe_name.endswith(".json") or safe_name.startswith("."):
-        return {"error": "only .json files allowed"}
+    if not safe_name.endswith(".json") or safe_name.startswith(".") or safe_name == "sessions.json":
+        return JSONResponse({"error": "nom de fichier refusé (.json uniquement, sessions.json réservé)"}, status_code=400)
     content = await file.read()
     if len(content) > MAX_UPLOAD_SIZE:
-        return {"error": "file too large (max 10MB)"}
+        return JSONResponse({"error": "file too large (max 10MB)"}, status_code=413)
+    try:
+        problem = validate_facts_data(json.loads(content))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        problem = "JSON invalide"
+    if problem:
+        return JSONResponse({"error": f"fichier refusé : {problem}"}, status_code=400)
     dest = DATA_DIR / safe_name
     if not dest.resolve().is_relative_to(DATA_DIR.resolve()):
         return {"error": "invalid filename"}

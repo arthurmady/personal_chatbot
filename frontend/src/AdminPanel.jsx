@@ -844,7 +844,11 @@ function DataTab() {
     setUploading(true);
     const form = new FormData();
     form.append("file", file);
-    await authFetch("/admin/data", { method: "POST", body: form });
+    const res = await authFetch("/admin/data", { method: "POST", body: form });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error || `Échec de l'envoi (${res.status})`);
+    }
     setUploading(false);
     load();
   };
